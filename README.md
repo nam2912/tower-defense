@@ -32,7 +32,8 @@ python3 main.py
 | --- | --- |
 | Start game | SPACE |
 | Select tower type | Click tower icon at bottom bar, or keys 1-0 |
-| Place tower | Click a build spot (stone platform) on the map |
+| Place tower | Click an unlocked build spot (stone platform) |
+| Unlock build slot | Click a locked slot (padlock icon), costs 60g |
 | Upgrade / sell tower | Click a placed tower, then use radial menu |
 | Upgrade base castle | Click the castle, then use radial menu |
 | Deselect | ESC or right-click |
@@ -45,20 +46,21 @@ python3 main.py
 
 ## Game Features
 
-### Towers (10 types, 15 upgrade levels each)
+### Towers (11 types, 15 upgrade levels each)
 
 | Tower | Unlock | Cost | Mechanic |
 | --- | --- | --- | --- |
+| Fortress | R1 | 40 | Tanky damage sponge, blocks bomber damage |
 | Archer | R1 | 50 | Fast single-target damage |
 | Barracks | R1 | 70 | Spawns 3 soldiers that block enemies on path |
 | Mage | R1 | 100 | Magic damage, ignores armor |
 | Artillery | R1 | 115 | AOE splash damage |
 | Freeze | R5 | 120 | Slows enemies |
-| Poison | R10 | 120 | Damage-over-time, ignores armor |
-| Ballista | R15 | 130 | Long-range piercing bolts |
-| Tesla | R20 | 160 | Chain lightning arcing between enemies |
-| Necromancer | R25 | 200 | Lifesteal heals base, ignores armor |
-| Laser | R30 | 250 | High single-target beam, ignores armor |
+| Poison | R10 | 130 | Damage-over-time, ignores armor |
+| Ballista | R15 | 150 | Long-range piercing bolts |
+| Tesla | R20 | 180 | Chain lightning arcing between enemies |
+| Necromancer | R25 | 220 | Lifesteal heals base, ignores armor |
+| Laser | R30 | 280 | High single-target beam, ignores armor |
 
 Each tower has **15 upgrade levels** with a tiered star system:
 - Lv 1-5: gold stars
@@ -83,7 +85,9 @@ scale linearly with caps.
 - **Infinite rounds** with dynamic difficulty scaling
 - **Base HP / Armor** system with 5 upgrade levels
 - **Tower HP / Armor** system (towers can be destroyed by bombers)
+- **Fortress tower** — cheap tanky tower to shield others from bombers
 - **Soldier blocking** — barracks soldiers intercept enemies on the path
+- **Build slot economy** — 8 free slots at start, remaining slots cost 60g to unlock
 - **Progressive tower unlocks** every 5 rounds
 - **Radial menus** for upgrade and sell actions
 - **Skip round** button with HP penalty for slow rounds
@@ -100,7 +104,7 @@ tower-defense/
 ├── enums.py             # TowerType, EnemyType, GameState, SoldierState
 ├── game_manager.py      # Central game state coordinator (Mediator)
 ├── game_map.py          # Tile grid, path waypoints, build spots
-├── tower.py             # Tower base class + 8 subclasses + factory
+├── tower.py             # Tower base class + 9 subclasses + factory
 ├── enemy.py             # Enemy class + factory with round scaling
 ├── soldier.py           # Soldier AI finite state machine
 ├── wave_manager.py      # Wave spawning and round generation
@@ -120,7 +124,7 @@ tower-defense/
 | Factory Method | `enemy.py`, `tower.py` | Create entities by type without exposing construction |
 | State (FSM) | `soldier.py`, `game_manager.py` | Discrete state transitions with dedicated handlers |
 | Mediator | `game_manager.py` | Central coordinator preventing direct module coupling |
-| Inheritance / Polymorphism | `tower.py` | 8 tower subclasses override attack/upgrade behavior |
+| Inheritance / Polymorphism | `tower.py` | 9 tower subclasses override attack/upgrade behavior |
 | Game Loop | `main.py` | Fixed-timestep input/update/render cycle |
 | Data-Driven Design | `config.py` | All balance data in a dictionary, not hard-coded |
 | Dependency Injection | All modules | Config passed via constructors, no global variables |
@@ -128,6 +132,7 @@ tower-defense/
 | Queue-Based Spawning | `wave_manager.py` | Wave as a queue of enemy types dequeued at intervals |
 | Surface Caching | `renderer.py` | Pre-rendered terrain cache for performance |
 | Particle System | `renderer.py` | Lightweight transient visual effects |
+| Build Slot Economy | `game_map.py` | Free/locked build spots with gold unlock cost |
 
 Full citations with academic sources are in `REFERENCES.md`.
 

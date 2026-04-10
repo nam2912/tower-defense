@@ -38,18 +38,23 @@ class Renderer:
         self.config = config
         self.tile_size = config["grid"]["tile_size"]
         pygame.font.init()
-        self.font_tiny = pygame.font.SysFont("Arial", 11)
-        self.font_small = pygame.font.SysFont("Arial", 14)
-        self.font_medium = pygame.font.SysFont("Arial", 20, bold=True)
-        self.font_large = pygame.font.SysFont("Arial", 36, bold=True)
-        self.font_title = pygame.font.SysFont("Arial", 52, bold=True)
-        self.font_dmg = pygame.font.SysFont("Arial", 16, bold=True)
+        self.font_tiny = pygame.font.SysFont("Arial", 13)
+        self.font_small = pygame.font.SysFont("Arial", 16)
+        self.font_medium = pygame.font.SysFont("Arial", 22, bold=True)
+        self.font_large = pygame.font.SysFont("Arial", 40, bold=True)
+        self.font_title = pygame.font.SysFont("Arial", 58, bold=True)
+        self.font_dmg = pygame.font.SysFont("Arial", 18, bold=True)
         self.anim_tick = 0
         self.particles = []
         self.damage_numbers = []
         self.grass_cache = None
         self._cached_grid = None
         self._base_wp = None
+
+    def invalidate_grass_cache(self):
+        """Force the grass/terrain cache to be rebuilt next frame."""
+        self.grass_cache = None
+        self._cached_grid = None
 
     def add_damage_number(self, x, y, amount, color=(255, 255, 80)):
         """Add a floating damage number at the given position.
@@ -143,7 +148,8 @@ class Renderer:
         self._draw_spawn_portal(game_map)
         self._draw_base_castle(game_map, base_hp, base_max_hp, base_level,
                                selected_base)
-        self._draw_build_spots(game_map, colors, hover_pos, selected_tower_type)
+        self._draw_build_spots(game_map, colors, hover_pos,
+                               selected_tower_type, gold)
 
         for tower in towers:
             self._draw_tower_shadow(tower)
@@ -182,6 +188,7 @@ class Renderer:
                 (game_map.cols * ts, game_map.rows * ts)
             )
             build_set = set(game_map.build_spots)
+            locked_set = set(game_map.locked_spots)
             for row in range(game_map.rows):
                 for col in range(game_map.cols):
                     if game_map.grid[row][col] == 1:
@@ -191,9 +198,11 @@ class Renderer:
                         self._draw_grass_tile(self.grass_cache,
                                               col, row, ts)
                         is_build = (col, row) in build_set
-                        if is_build:
+                        is_locked = (col, row) in locked_set
+                        if is_build or is_locked:
                             self._draw_build_platform(
-                                self.grass_cache, col, row, ts)
+                                self.grass_cache, col, row, ts,
+                                locked=is_locked)
                         else:
                             self._draw_terrain_decoration(
                                 self.grass_cache, col, row, ts)
@@ -291,31 +300,64 @@ class Renderer:
                              (col * ts + ts - 1, row * ts),
                              (col * ts + ts - 1, row * ts + ts), 2)
 
-    def _draw_build_platform(self, surface, col, row, ts):
-        """Draw a warm stone platform with metallic rivets on buildable tiles."""
+    def _draw_build_platform(self, surface, col, row, ts, locked=False):
+        """Draw a stone platform on buildable tiles.
+
+        Unlocked platforms are warm-toned; locked ones are darker with a
+        padlock icon, indicating they require gold to unlock.
+
+        Args:
+            surface: Surface to draw on.
+            col: Grid column.
+            row: Grid row.
+            ts: Tile size.
+            locked: Whether the spot is locked (requires gold).
+        """
         cx = col * ts + ts // 2
         cy = row * ts + ts // 2
         pw, ph = ts - 10, ts - 10
         px, py = cx - pw // 2, cy - ph // 2
 
+        if locked:
+            stone_c = (95, 88, 78)
+            hl_c = (105, 98, 88)
+            border_c = (70, 62, 52)
+            rivet_c = (120, 112, 100)
+            rivet_hl = (140, 132, 120)
+        else:
+            stone_c = (150, 135, 105)
+            hl_c = (162, 148, 118)
+            border_c = (110, 95, 70)
+            rivet_c = (185, 170, 140)
+            rivet_hl = (210, 200, 175)
+
         shadow_c = (45, 55, 30)
         pygame.draw.rect(surface, shadow_c,
                          (px, py + 2, pw, ph), border_radius=5)
-
-        pygame.draw.rect(surface, (150, 135, 105),
+        pygame.draw.rect(surface, stone_c,
                          (px, py, pw, ph), border_radius=5)
 
         hl_rect = pygame.Rect(px + 2, py + 2, pw - 4, ph // 2 - 2)
-        pygame.draw.rect(surface, (162, 148, 118), hl_rect, border_radius=4)
-
-        pygame.draw.rect(surface, (110, 95, 70),
+        pygame.draw.rect(surface, hl_c, hl_rect, border_radius=4)
+        pygame.draw.rect(surface, border_c,
                          (px, py, pw, ph), 2, border_radius=5)
 
-        rivet_c = (185, 170, 140)
-        rivet_hl = (210, 200, 175)
         for dx, dy in [(5, 5), (pw - 6, 5), (5, ph - 6), (pw - 6, ph - 6)]:
             pygame.draw.circle(surface, rivet_c, (px + dx, py + dy), 3)
             pygame.draw.circle(surface, rivet_hl, (px + dx - 1, py + dy - 1), 1)
+
+        if locked:
+            lx, ly = cx, cy
+            body_w, body_h = 10, 8
+            pygame.draw.rect(surface, (160, 140, 60),
+                             (lx - body_w // 2, ly, body_w, body_h),
+                             border_radius=2)
+            pygame.draw.rect(surface, (120, 100, 40),
+                             (lx - body_w // 2, ly, body_w, body_h),
+                             1, border_radius=2)
+            pygame.draw.arc(surface, (160, 140, 60),
+                            (lx - 4, ly - 6, 8, 10),
+                            math.pi, 0, 2)
 
     def _draw_terrain_decoration(self, surface, col, row, ts):
         """Draw mountains, trees, rocks, or bushes on non-buildable tiles."""
@@ -626,9 +668,18 @@ class Renderer:
     # ------------------------------------------------------------------
 
     def _draw_build_spots(self, game_map, colors, hover_pos,
-                          selected_tower_type):
-        """Draw valid build spots with animated markers."""
+                          selected_tower_type, gold=0):
+        """Draw valid and locked build spots with animated markers.
+
+        Args:
+            game_map: GameMap instance.
+            colors: Color configuration dictionary.
+            hover_pos: Current hovered grid (col, row) or None.
+            selected_tower_type: Currently selected TowerType or None.
+            gold: Current player gold (for locked spot affordability).
+        """
         ts = self.tile_size
+        slot_cost = self.config["gameplay"].get("slot_unlock_cost", 0)
         for col, row in game_map.build_spots:
             cx = col * ts + ts // 2
             cy = row * ts + ts // 2
@@ -644,7 +695,7 @@ class Renderer:
                 pygame.draw.rect(self.screen, (180, 255, 180), rect, 2,
                                  border_radius=4)
                 cross_surf = pygame.Surface((ts - 4, ts - 4), pygame.SRCALPHA)
-                cross_s = 6
+                cross_s = 8
                 csx = (ts - 4) // 2
                 csy = (ts - 4) // 2
                 pygame.draw.line(cross_surf, (255, 255, 255, 160),
@@ -657,11 +708,36 @@ class Renderer:
             else:
                 pulse = abs(math.sin(self.anim_tick * 0.04 + col + row))
                 alpha = int(50 + pulse * 60)
-                r = int(9 + pulse * 3)
+                r = int(10 + pulse * 4)
                 surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
                 pygame.draw.circle(surf, (130, 220, 100, alpha),
                                    (r, r), r, 2)
                 self.screen.blit(surf, (cx - r, cy - r))
+
+        for col, row in game_map.locked_spots:
+            cx = col * ts + ts // 2
+            cy = row * ts + ts // 2
+            is_hover = (hover_pos is not None and hover_pos == (col, row))
+            if is_hover:
+                rect = pygame.Rect(col * ts + 2, row * ts + 2,
+                                   ts - 4, ts - 4)
+                can_afford = gold >= slot_cost
+                border_c = (255, 215, 80) if can_afford else (120, 100, 60)
+                pygame.draw.rect(self.screen, border_c, rect, 2,
+                                 border_radius=4)
+                cost_c = (255, 215, 50) if can_afford else (160, 130, 70)
+                cost_txt = self.font_small.render(
+                    f"{slot_cost}g", True, cost_c)
+                self.screen.blit(
+                    cost_txt,
+                    cost_txt.get_rect(center=(cx, cy + ts // 4)))
+            pulse = abs(math.sin(self.anim_tick * 0.03 + col * 3 + row * 5))
+            alpha = int(30 + pulse * 30)
+            r = int(8 + pulse * 2)
+            surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (180, 150, 60, alpha),
+                               (r, r), r, 2)
+            self.screen.blit(surf, (cx - r, cy - r))
 
     # ------------------------------------------------------------------
     # Shadows helper
@@ -689,6 +765,7 @@ class Renderer:
     def _draw_towers(self, towers, colors):
         """Draw all towers."""
         draw_map = {
+            TowerType.FORTRESS: self._draw_fortress_tower,
             TowerType.ARCHER: self._draw_archer_tower,
             TowerType.BARRACKS: self._draw_barracks_tower,
             TowerType.MAGE: self._draw_mage_tower,
@@ -731,6 +808,78 @@ class Renderer:
         pygame.draw.rect(hl_surf, (*lighter, 70),
                          hl_surf.get_rect(), border_radius=2)
         self.screen.blit(hl_surf, (px + 2, py + 2))
+
+    def _draw_fortress_tower(self, cx, cy, ts, tower):
+        """Draw a heavy stone fortress with battlements and a shield emblem."""
+        outline = (40, 35, 30)
+        self._draw_tower_platform(cx, cy, ts, (90, 85, 75))
+
+        base_w = ts // 2 + 8
+        base_h = ts // 2 + 10
+        bx = cx - base_w // 2
+        by = cy - base_h // 2 - 2
+
+        pygame.draw.rect(self.screen, outline,
+                         (bx - 1, by - 1, base_w + 2, base_h + 2),
+                         border_radius=2)
+        pygame.draw.rect(self.screen, (130, 125, 115),
+                         (bx, by, base_w, base_h), border_radius=2)
+        pygame.draw.rect(self.screen, (145, 140, 130),
+                         (bx + 2, by + 2, base_w - 4, base_h // 3),
+                         border_radius=2)
+
+        for i in range(1, 4):
+            py_line = by + i * (base_h // 4)
+            pygame.draw.line(self.screen, (105, 100, 90),
+                             (bx + 2, py_line), (bx + base_w - 2, py_line), 1)
+
+        battlement_w = base_w // 5
+        battlement_h = 6
+        for i in range(5):
+            if i % 2 == 0:
+                bm_x = bx + i * battlement_w
+                pygame.draw.rect(self.screen, outline,
+                                 (bm_x - 1, by - battlement_h - 1,
+                                  battlement_w + 1, battlement_h + 2))
+                pygame.draw.rect(self.screen, (150, 145, 135),
+                                 (bm_x, by - battlement_h,
+                                  battlement_w - 1, battlement_h))
+
+        shield_cx, shield_cy = cx, cy - 2
+        shield_w, shield_h = 10, 12
+        shield_pts = [
+            (shield_cx, shield_cy - shield_h // 2),
+            (shield_cx - shield_w // 2, shield_cy - shield_h // 4),
+            (shield_cx - shield_w // 2, shield_cy + shield_h // 4),
+            (shield_cx, shield_cy + shield_h // 2),
+            (shield_cx + shield_w // 2, shield_cy + shield_h // 4),
+            (shield_cx + shield_w // 2, shield_cy - shield_h // 4),
+        ]
+        pygame.draw.polygon(self.screen, outline, shield_pts)
+        inner_pts = [(p[0] + (shield_cx - p[0]) * 0.15,
+                      p[1] + (shield_cy - p[1]) * 0.15)
+                     for p in shield_pts]
+        pygame.draw.polygon(self.screen, (180, 160, 60), inner_pts)
+        pygame.draw.line(self.screen, (140, 120, 40),
+                         (shield_cx, shield_cy - 4),
+                         (shield_cx, shield_cy + 4), 2)
+        pygame.draw.line(self.screen, (140, 120, 40),
+                         (shield_cx - 3, shield_cy),
+                         (shield_cx + 3, shield_cy), 2)
+
+        hp_ratio = tower.get_tower_hp_ratio()
+        if hp_ratio > 0.7:
+            glow_c = (80, 180, 80)
+        elif hp_ratio > 0.3:
+            glow_c = (200, 180, 50)
+        else:
+            glow_c = (200, 60, 60)
+        pulse = abs(math.sin(self.anim_tick * 0.05))
+        glow_r = int(3 + pulse * 2)
+        glow_surf = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow_surf, (*glow_c, int(60 + pulse * 40)),
+                           (glow_r, glow_r), glow_r)
+        self.screen.blit(glow_surf, (cx - glow_r, by - battlement_h - glow_r))
 
     def _draw_archer_tower(self, cx, cy, ts, tower):
         """Draw a detailed wooden archer tower with bowman and bold outlines."""
@@ -2133,7 +2282,7 @@ class Renderer:
     def _draw_radial_menu(self, tower, gold):
         """Draw Kingdom Rush-style radial upgrade/sell buttons around a tower."""
         cx, cy = tower.pixel_x, tower.pixel_y
-        ring_r = self.tile_size // 2 + 16
+        ring_r = self.tile_size // 2 + 20
 
         ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4),
                                    pygame.SRCALPHA)
@@ -2218,7 +2367,7 @@ class Renderer:
         if self._base_wp is None:
             return
         bx, by = self._base_wp
-        ring_r = self.tile_size // 2 + 16
+        ring_r = self.tile_size // 2 + 20
         ring_surf = pygame.Surface((ring_r * 2 + 4, ring_r * 2 + 4),
                                    pygame.SRCALPHA)
         pygame.draw.circle(ring_surf, (255, 200, 50, 60),
@@ -2288,32 +2437,32 @@ class Renderer:
     def _draw_tower_bar(self, selected_tower_type, gold, tower_unlocks=None):
         """Draw tower purchase icons at the bottom-center of the screen."""
         tower_types = [
-            TowerType.ARCHER, TowerType.BARRACKS, TowerType.MAGE,
-            TowerType.ARTILLERY, TowerType.FREEZE, TowerType.POISON,
-            TowerType.BALLISTA, TowerType.TESLA, TowerType.NECROMANCER,
-            TowerType.LASER,
+            TowerType.FORTRESS, TowerType.ARCHER, TowerType.BARRACKS,
+            TowerType.MAGE, TowerType.ARTILLERY, TowerType.FREEZE,
+            TowerType.POISON, TowerType.BALLISTA, TowerType.TESLA,
+            TowerType.NECROMANCER, TowerType.LASER,
         ]
         icon_colors = [
-            (0, 160, 40), (60, 90, 160), (140, 60, 200),
-            (180, 130, 30), (100, 180, 240), (80, 180, 50),
-            (160, 120, 40), (60, 100, 220), (100, 50, 120),
-            (220, 60, 60),
+            (130, 125, 115), (0, 160, 40), (60, 90, 160),
+            (140, 60, 200), (180, 130, 30), (100, 180, 240),
+            (80, 180, 50), (160, 120, 40), (60, 100, 220),
+            (100, 50, 120), (220, 60, 60),
         ]
         screen_w = self.config["screen"]["width"]
         screen_h = self.config["screen"]["height"]
-        btn_size = 40
-        gap = 4
+        btn_size = 48
+        gap = 5
         total_w = len(tower_types) * btn_size + (len(tower_types) - 1) * gap
         start_x = (screen_w - total_w) // 2
-        bar_y = screen_h - btn_size - 10
+        bar_y = screen_h - btn_size - 12
 
-        bar_bg = pygame.Surface((total_w + 16, btn_size + 12), pygame.SRCALPHA)
+        bar_bg = pygame.Surface((total_w + 20, btn_size + 14), pygame.SRCALPHA)
         pygame.draw.rect(bar_bg, (15, 12, 8, 170),
-                         (0, 0, total_w + 16, btn_size + 12), border_radius=8)
+                         (0, 0, total_w + 20, btn_size + 14), border_radius=8)
         pygame.draw.rect(bar_bg, (140, 115, 65, 120),
-                         (0, 0, total_w + 16, btn_size + 12),
+                         (0, 0, total_w + 20, btn_size + 14),
                          2, border_radius=8)
-        self.screen.blit(bar_bg, (start_x - 8, bar_y - 6))
+        self.screen.blit(bar_bg, (start_x - 10, bar_y - 7))
 
         mouse = pygame.mouse.get_pos()
 
@@ -2366,7 +2515,18 @@ class Renderer:
 
     def _draw_tower_icon(self, t_type, icx, icy, ic):
         """Draw a small tower icon in a button."""
-        if t_type == TowerType.ARCHER:
+        if t_type == TowerType.FORTRESS:
+            pygame.draw.rect(self.screen, ic,
+                             (icx - 7, icy - 6, 14, 12), border_radius=2)
+            for bx_off in [-5, -1, 3, 7]:
+                if bx_off % 4 == 1:
+                    continue
+                pygame.draw.rect(self.screen, (160, 155, 145),
+                                 (icx - 7 + bx_off, icy - 9, 3, 3))
+            pygame.draw.polygon(self.screen, (180, 160, 60),
+                                [(icx, icy - 4), (icx - 4, icy),
+                                 (icx, icy + 4), (icx + 4, icy)])
+        elif t_type == TowerType.ARCHER:
             pygame.draw.rect(self.screen, ic,
                              (icx - 5, icy - 6, 10, 12), border_radius=1)
             pygame.draw.polygon(self.screen, (0, min(255, ic[1] + 40), 0),
@@ -2687,18 +2847,18 @@ class Renderer:
     def get_tower_button_rects(self):
         """Get clickable rectangles for the bottom tower bar."""
         tower_types = [
-            TowerType.ARCHER, TowerType.BARRACKS, TowerType.MAGE,
-            TowerType.ARTILLERY, TowerType.FREEZE, TowerType.POISON,
-            TowerType.BALLISTA, TowerType.TESLA, TowerType.NECROMANCER,
-            TowerType.LASER,
+            TowerType.FORTRESS, TowerType.ARCHER, TowerType.BARRACKS,
+            TowerType.MAGE, TowerType.ARTILLERY, TowerType.FREEZE,
+            TowerType.POISON, TowerType.BALLISTA, TowerType.TESLA,
+            TowerType.NECROMANCER, TowerType.LASER,
         ]
         screen_w = self.config["screen"]["width"]
         screen_h = self.config["screen"]["height"]
-        btn_size = 40
-        gap = 4
+        btn_size = 48
+        gap = 5
         total_w = len(tower_types) * btn_size + (len(tower_types) - 1) * gap
         start_x = (screen_w - total_w) // 2
-        bar_y = screen_h - btn_size - 10
+        bar_y = screen_h - btn_size - 12
 
         buttons = []
         for i, t_type in enumerate(tower_types):
@@ -2710,16 +2870,16 @@ class Renderer:
     def get_upgrade_button_rect(self, tower):
         """Get the radial upgrade button rect above a tower."""
         cx, cy = tower.pixel_x, tower.pixel_y
-        btn_w, btn_h = 40, 34
-        ring_r = self.tile_size // 2 + 16
+        btn_w, btn_h = 48, 40
+        ring_r = self.tile_size // 2 + 20
         return pygame.Rect(cx - btn_w // 2, cy - ring_r - btn_h // 2,
                            btn_w, btn_h)
 
     def get_sell_button_rect(self, tower):
         """Get the radial sell button rect below a tower."""
         cx, cy = tower.pixel_x, tower.pixel_y
-        btn_w, btn_h = 40, 34
-        ring_r = self.tile_size // 2 + 16
+        btn_w, btn_h = 48, 40
+        ring_r = self.tile_size // 2 + 20
         return pygame.Rect(cx - btn_w // 2, cy + ring_r - btn_h // 2,
                            btn_w, btn_h)
 
@@ -2729,8 +2889,8 @@ class Renderer:
         if wp is None:
             return None
         bx, by = wp
-        btn_w, btn_h = 40, 34
-        ring_r = self.tile_size // 2 + 16
+        btn_w, btn_h = 48, 40
+        ring_r = self.tile_size // 2 + 20
         return pygame.Rect(bx - btn_w // 2, by - ring_r - btn_h // 2,
                            btn_w, btn_h)
 

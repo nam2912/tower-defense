@@ -9,6 +9,7 @@ from enum import Enum, auto
 
 class TowerType(Enum):
     """Types of towers the player can build."""
+    FORTRESS = auto()
     ARCHER = auto()
     BARRACKS = auto()
     MAGE = auto()

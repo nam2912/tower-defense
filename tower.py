@@ -4,6 +4,7 @@ Defines the Tower base class and subclasses for each tower type.
 Handles targeting, attacking, upgrading, and special effects.
 
 Tower types (unlock round in parentheses):
+- Fortress: tanky damage sponge, blocks bomber damage (R1)
 - Archer: fast single-target (R1)
 - Barracks: spawns soldiers that block enemies (R1)
 - Mage: magic damage ignoring armor (R1)
@@ -200,6 +201,38 @@ class Tower:
     def _get_range_pixels(self):
         """Convert tile-based range to pixel range."""
         return self.attack_range * self.tile_size
+
+
+class FortressTower(Tower):
+    """Heavily armored defensive tower designed to absorb bomber attacks.
+
+    Has the highest HP and armor of all towers but deals minimal damage.
+    Acts as a damage sponge to shield nearby valuable towers.
+    """
+
+    def __init__(self, col, row, config, tile_size):
+        """Initialize a fortress tower."""
+        super().__init__(TowerType.FORTRESS, col, row, config, tile_size)
+
+    def take_tower_damage(self, damage):
+        """Apply damage to fortress, with extra armor effectiveness.
+
+        Fortress towers reduce incoming damage more heavily than
+        standard towers due to their reinforced construction.
+
+        Args:
+            damage: Raw damage amount.
+
+        Returns:
+            True if the tower was destroyed.
+        """
+        actual = max(1, damage - self.tower_armor)
+        self.tower_hp -= actual
+        if self.tower_hp <= 0:
+            self.tower_hp = 0
+            self.is_destroyed = True
+            return True
+        return False
 
 
 class ArtilleryTower(Tower):
@@ -577,7 +610,9 @@ def create_tower(tower_type, col, row, config, tile_size, game_map=None):
     """
     tower_config = config["towers"][tower_type]
 
-    if tower_type == TowerType.ARTILLERY:
+    if tower_type == TowerType.FORTRESS:
+        return FortressTower(col, row, tower_config, tile_size)
+    elif tower_type == TowerType.ARTILLERY:
         return ArtilleryTower(col, row, tower_config, tile_size)
     elif tower_type == TowerType.BARRACKS:
         return BarracksTower(col, row, tower_config, tile_size, game_map)

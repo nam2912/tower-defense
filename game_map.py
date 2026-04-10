@@ -1,10 +1,15 @@
 """Game map module.
 
 Manages the tile grid, enemy path waypoints, and valid tower build spots.
+Build spots are split into free (available at game start) and locked
+(require gold to unlock).
 
 Design patterns: Tile-Based Map.
 See REFERENCES.md for full citations.
 """
+
+import random
+
 
 class GameMap:
     """Represents the game map with grid, path, and build spots.
@@ -15,6 +20,7 @@ class GameMap:
         rows: Number of rows in the grid.
         path_waypoints: List of (x, y) tuples defining the enemy path.
         build_spots: List of (col, row) tuples where towers can be placed.
+        locked_spots: List of (col, row) tuples requiring gold to unlock.
         grid: 2D list representing tile types.
     """
 
@@ -30,11 +36,17 @@ class GameMap:
         self.rows = grid_config["rows"]
         self.path_waypoints = []
         self.build_spots = []
+        self.locked_spots = []
         self.grid = []
-        self._init_default_map()
+        free_count = config["gameplay"].get("free_build_slots", 999)
+        self._init_default_map(free_count)
 
-    def _init_default_map(self):
-        """Set up the default map layout with path and build spots."""
+    def _init_default_map(self, free_count):
+        """Set up the default map layout with path and build spots.
+
+        Args:
+            free_count: Number of build spots unlocked for free at start.
+        """
         self.grid = [
             [0 for _ in range(self.cols)]
             for _ in range(self.rows)
@@ -53,6 +65,7 @@ class GameMap:
 
         self._mark_path_on_grid()
         self._generate_build_spots()
+        self._split_free_locked(free_count)
 
     def _mark_path_on_grid(self):
         """Mark path tiles on the grid based on waypoints."""
@@ -100,17 +113,89 @@ class GameMap:
                         and (nc, nr) not in self.build_spots):
                     self.build_spots.append((nc, nr))
 
+    def _split_free_locked(self, free_count):
+        """Split generated build spots into free and locked sets.
+
+        Free spots are distributed evenly across map zones so that
+        each area of the path has 1-2 free spots rather than all
+        free spots clustering in one region.
+
+        Args:
+            free_count: Number of spots available for free.
+        """
+        if free_count >= len(self.build_spots):
+            self.locked_spots = []
+            return
+
+        zone_cols = max(1, self.cols // 3)
+        zone_rows = max(1, self.rows // 2)
+        zones = {}
+        for spot in self.build_spots:
+            zx = spot[0] // zone_cols
+            zy = spot[1] // zone_rows
+            zones.setdefault((zx, zy), []).append(spot)
+
+        rng = random.Random(42)
+        for spots_in_zone in zones.values():
+            rng.shuffle(spots_in_zone)
+
+        free = []
+        zone_keys = sorted(zones.keys())
+        round_robin_idx = 0
+        while len(free) < free_count and round_robin_idx < max(
+                len(v) for v in zones.values()):
+            for key in zone_keys:
+                if len(free) >= free_count:
+                    break
+                bucket = zones[key]
+                if round_robin_idx < len(bucket):
+                    free.append(bucket[round_robin_idx])
+            round_robin_idx += 1
+
+        free_set = set(free)
+        locked = [s for s in self.build_spots if s not in free_set]
+        self.build_spots = free
+        self.locked_spots = locked
+
     def is_build_spot(self, col, row):
-        """Check if a grid position is a valid build spot.
+        """Check if a grid position is a valid (unlocked) build spot.
 
         Args:
             col: Column index.
             row: Row index.
 
         Returns:
-            True if the position is a valid build spot.
+            True if the position is an unlocked build spot.
         """
         return (col, row) in self.build_spots
+
+    def is_locked_spot(self, col, row):
+        """Check if a grid position is a locked build spot.
+
+        Args:
+            col: Column index.
+            row: Row index.
+
+        Returns:
+            True if the position is a locked spot.
+        """
+        return (col, row) in self.locked_spots
+
+    def unlock_spot(self, col, row):
+        """Unlock a locked build spot, making it available for tower placement.
+
+        Args:
+            col: Column index.
+            row: Row index.
+
+        Returns:
+            True if the spot was successfully unlocked.
+        """
+        if (col, row) in self.locked_spots:
+            self.locked_spots.remove((col, row))
+            self.build_spots.append((col, row))
+            return True
+        return False
 
     def is_path_tile(self, col, row):
         """Check if a grid position is part of the enemy path.

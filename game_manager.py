@@ -116,25 +116,25 @@ class GameManager:
             elif event.key == pygame.K_p:
                 self.state = GameState.PAUSED
             elif event.key == pygame.K_1:
-                self._select_tower_type(TowerType.ARCHER)
+                self._select_tower_type(TowerType.FORTRESS)
             elif event.key == pygame.K_2:
-                self._select_tower_type(TowerType.BARRACKS)
+                self._select_tower_type(TowerType.ARCHER)
             elif event.key == pygame.K_3:
-                self._select_tower_type(TowerType.MAGE)
+                self._select_tower_type(TowerType.BARRACKS)
             elif event.key == pygame.K_4:
-                self._select_tower_type(TowerType.ARTILLERY)
+                self._select_tower_type(TowerType.MAGE)
             elif event.key == pygame.K_5:
-                self._select_tower_type(TowerType.FREEZE)
+                self._select_tower_type(TowerType.ARTILLERY)
             elif event.key == pygame.K_6:
-                self._select_tower_type(TowerType.POISON)
+                self._select_tower_type(TowerType.FREEZE)
             elif event.key == pygame.K_7:
-                self._select_tower_type(TowerType.BALLISTA)
+                self._select_tower_type(TowerType.POISON)
             elif event.key == pygame.K_8:
-                self._select_tower_type(TowerType.TESLA)
+                self._select_tower_type(TowerType.BALLISTA)
             elif event.key == pygame.K_9:
-                self._select_tower_type(TowerType.NECROMANCER)
+                self._select_tower_type(TowerType.TESLA)
             elif event.key == pygame.K_0:
-                self._select_tower_type(TowerType.LASER)
+                self._select_tower_type(TowerType.NECROMANCER)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_click(event.pos)
 
@@ -259,6 +259,10 @@ class GameManager:
 
         col, row = self.game_map.get_grid_pos(mouse_pos[0], mouse_pos[1])
 
+        if self.game_map.is_locked_spot(col, row):
+            self._try_unlock_slot(col, row)
+            return
+
         if self.selected_tower_type is not None:
             self._try_place_tower(col, row)
         else:
@@ -323,6 +327,22 @@ class GameManager:
         self.gold -= cost
         self.game_map.remove_build_spot(col, row)
         self.selected_tower_type = None
+
+    def _try_unlock_slot(self, col, row):
+        """Attempt to unlock a locked build spot by spending gold.
+
+        Args:
+            col: Grid column.
+            row: Grid row.
+        """
+        if not self.game_map.is_locked_spot(col, row):
+            return
+        cost = self.config["gameplay"]["slot_unlock_cost"]
+        if self.gold < cost:
+            return
+        if self.game_map.unlock_spot(col, row):
+            self.gold -= cost
+            self.renderer.invalidate_grass_cache()
 
     def _try_select_placed_tower(self, col, row):
         """Try to select an existing tower at the given grid position.
