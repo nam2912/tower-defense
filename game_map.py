@@ -6,9 +6,6 @@ Design patterns: Tile-Based Map.
 See REFERENCES.md for full citations.
 """
 
-import math
-
-
 class GameMap:
     """Represents the game map with grid, path, and build spots.
 
@@ -27,15 +24,42 @@ class GameMap:
         Args:
             config: Game configuration dictionary.
         """
-        pass
+        grid_config = config["grid"]
+        self.tile_size = grid_config["tile_size"]
+        self.cols = grid_config["cols"]
+        self.rows = grid_config["rows"]
+        self.path_waypoints = []
+        self.build_spots = []
+        self.grid = []
+        self._init_default_map()
 
     def _init_default_map(self):
         """Set up the default map layout with path and build spots."""
-        pass
+        self.grid = [
+            [0 for _ in range(self.cols)]
+            for _ in range(self.rows)
+        ]
+
+        self.path_waypoints = [
+            (0, 4),
+            (3, 4),
+            (3, 1),
+            (7, 1),
+            (7, 7),
+            (11, 7),
+            (11, 3),
+            (14, 3)
+        ]
+
+        self._mark_path_on_grid()
+        self._generate_build_spots()
 
     def _mark_path_on_grid(self):
         """Mark path tiles on the grid based on waypoints."""
-        pass
+        for i in range(len(self.path_waypoints) - 1):
+            start = self.path_waypoints[i]
+            end = self.path_waypoints[i + 1]
+            self._mark_line(start, end)
 
     def _mark_line(self, start, end):
         """Mark a straight line between two waypoints on the grid.
@@ -44,11 +68,37 @@ class GameMap:
             start: Starting (col, row) tuple.
             end: Ending (col, row) tuple.
         """
-        pass
+        col_start, row_start = start
+        col_end, row_end = end
+
+        if col_start == col_end:
+            step = 1 if row_end > row_start else -1
+            for r in range(row_start, row_end + step, step):
+                self.grid[r][col_start] = 1
+        elif row_start == row_end:
+            step = 1 if col_end > col_start else -1
+            for c in range(col_start, col_end + step, step):
+                self.grid[row_start][c] = 1
 
     def _generate_build_spots(self):
         """Generate valid build spots adjacent to the path."""
-        pass
+        path_tiles = set()
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if self.grid[r][c] == 1:
+                    path_tiles.add((c, r))
+
+        for col, row in path_tiles:
+            neighbors = [
+                (col - 1, row), (col + 1, row),
+                (col, row - 1), (col, row + 1)
+            ]
+            for nc, nr in neighbors:
+                if (0 <= nc < self.cols and 0 <= nr < self.rows
+                        and self.grid[nr][nc] == 0
+                        and (nc, nr) not in path_tiles
+                        and (nc, nr) not in self.build_spots):
+                    self.build_spots.append((nc, nr))
 
     def is_build_spot(self, col, row):
         """Check if a grid position is a valid build spot.
@@ -60,7 +110,7 @@ class GameMap:
         Returns:
             True if the position is a valid build spot.
         """
-        pass
+        return (col, row) in self.build_spots
 
     def is_path_tile(self, col, row):
         """Check if a grid position is part of the enemy path.
@@ -72,7 +122,9 @@ class GameMap:
         Returns:
             True if the position is a path tile.
         """
-        pass
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            return self.grid[row][col] == 1
+        return False
 
     def get_pixel_pos(self, col, row):
         """Convert grid coordinates to pixel coordinates (center of tile).
@@ -84,7 +136,9 @@ class GameMap:
         Returns:
             Tuple (x, y) pixel position at center of the tile.
         """
-        pass
+        x = col * self.tile_size + self.tile_size // 2
+        y = row * self.tile_size + self.tile_size // 2
+        return (x, y)
 
     def get_grid_pos(self, pixel_x, pixel_y):
         """Convert pixel coordinates to grid coordinates.
@@ -96,7 +150,9 @@ class GameMap:
         Returns:
             Tuple (col, row) grid position.
         """
-        pass
+        col = pixel_x // self.tile_size
+        row = pixel_y // self.tile_size
+        return (col, row)
 
     def get_path_pixel_waypoints(self):
         """Get path waypoints in pixel coordinates.
@@ -104,7 +160,10 @@ class GameMap:
         Returns:
             List of (x, y) tuples in pixel coordinates.
         """
-        pass
+        pixel_waypoints = []
+        for col, row in self.path_waypoints:
+            pixel_waypoints.append(self.get_pixel_pos(col, row))
+        return pixel_waypoints
 
     def remove_build_spot(self, col, row):
         """Remove a build spot after a tower is placed.
@@ -113,7 +172,8 @@ class GameMap:
             col: Column index.
             row: Row index.
         """
-        pass
+        if (col, row) in self.build_spots:
+            self.build_spots.remove((col, row))
 
     def add_build_spot(self, col, row):
         """Re-add a build spot when a tower is sold.
@@ -122,4 +182,5 @@ class GameMap:
             col: Column index.
             row: Row index.
         """
-        pass
+        if (col, row) not in self.build_spots and not self.is_path_tile(col, row):
+            self.build_spots.append((col, row))

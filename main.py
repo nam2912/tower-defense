@@ -22,7 +22,12 @@ def create_screen(config):
     Returns:
         Pygame display surface.
     """
-    pass
+    screen_config = config["screen"]
+    screen = pygame.display.set_mode(
+        (screen_config["width"], screen_config["height"])
+    )
+    pygame.display.set_caption(screen_config["title"])
+    return screen
 
 
 def run_game_loop(screen, config):
@@ -32,12 +37,35 @@ def run_game_loop(screen, config):
         screen: Pygame display surface.
         config: Game configuration dictionary.
     """
-    pass
+    clock = pygame.time.Clock()
+    fps = config["screen"]["fps"]
+    game_manager = GameManager(screen, config)
+
+    running = True
+    while running:
+        dt = clock.tick(fps) / 1000.0
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            else:
+                game_manager.handle_event(event)
+
+        game_manager.update(dt)
+        game_manager.render()
+        pygame.display.flip()
 
 
 def main():
     """Initialize Pygame and start the game."""
-    pass
+    pygame.init()
+    config = get_config()
+    screen = create_screen(config)
+
+    run_game_loop(screen, config)
+
+    pygame.quit()
+    sys.exit()
 
 
 if __name__ == "__main__":

@@ -10,9 +10,15 @@ from enum import Enum, auto
 class TowerType(Enum):
     """Types of towers the player can build."""
     ARCHER = auto()
+    BARRACKS = auto()
     MAGE = auto()
     ARTILLERY = auto()
-    BARRACKS = auto()
+    FREEZE = auto()
+    POISON = auto()
+    BALLISTA = auto()
+    TESLA = auto()
+    NECROMANCER = auto()
+    LASER = auto()
 
 
 class EnemyType(Enum):
@@ -20,6 +26,7 @@ class EnemyType(Enum):
     GRUNT = auto()
     RUNNER = auto()
     ARMORED = auto()
+    BOMBER = auto()
     BOSS = auto()
 
 
@@ -28,6 +35,8 @@ class GameState(Enum):
     MENU = auto()
     PLAYING = auto()
     PAUSED = auto()
+    ROUND_COMPLETE = auto()
+    ROUND_FAILED = auto()
     GAME_OVER = auto()
 
 
