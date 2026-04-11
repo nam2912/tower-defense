@@ -1,10 +1,7 @@
 """Wave manager module.
 
-Generates infinite rounds of enemies with progressive scaling.
-Each round increases enemy count, HP, speed, armor, and boss frequency.
-
-Design patterns: Queue-Based Spawning, Data-Driven Design.
-See REFERENCES.md for full citations.
+Runs infinite rounds with harder scaling over time: more enemies, higher HP,
+speed, armor, and bosses. Spawns are pulled from a queue and driven by config.
 """
 
 from enums import EnemyType

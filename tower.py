@@ -1,7 +1,8 @@
 """Tower module.
 
-Defines the Tower base class and subclasses for each tower type.
-Handles targeting, attacking, upgrading, and special effects.
+Tower base class plus subclasses per tower type, with targeting, attacks,
+upgrades, and special behavior. create_tower picks the right subclass from the
+tower type so stats and setup stay in one place.
 
 Tower types (unlock round in parentheses):
 - Fortress: tanky damage sponge, blocks bomber damage (R1)
@@ -15,17 +16,11 @@ Tower types (unlock round in parentheses):
 - Tesla: chain lightning hitting nearby enemies (R20)
 - Necromancer: lifesteal heals base, ignores armor (R25)
 - Laser: high single-target beam, ignores armor (R30)
-
-Design patterns: Inheritance/Polymorphism, Factory Method.
-See REFERENCES.md for full citations.
 """
 
 import math
 from enums import TowerType
 from soldier import Soldier
-
-
-MAX_LEVEL = 15
 
 
 class Tower:
@@ -37,7 +32,7 @@ class Tower:
         y: Grid row position.
         pixel_x: Pixel x position (center of tile).
         pixel_y: Pixel y position (center of tile).
-        level: Upgrade tier (1 to MAX_LEVEL).
+        level: Upgrade tier (1 to max_level).
         damage: Current damage per attack.
         attack_range: Current targeting radius in tiles.
         attack_speed: Current seconds between attacks.
@@ -65,6 +60,7 @@ class Tower:
         self.pixel_y = row * tile_size + tile_size // 2
         self.level = 1
         self.config = config
+        self.max_level = len(config["damage"])
         self.damage = config["damage"][0]
         self.attack_range = config["attack_range"][0]
         self.attack_speed = config["attack_speed"][0]
@@ -137,7 +133,7 @@ class Tower:
         Returns:
             True if upgrade was successful.
         """
-        if self.level >= MAX_LEVEL:
+        if self.level >= self.max_level:
             return False
 
         self.level += 1
@@ -154,7 +150,7 @@ class Tower:
 
     def get_upgrade_cost(self):
         """Get the cost to upgrade to the next level."""
-        if self.level >= MAX_LEVEL:
+        if self.level >= self.max_level:
             return 0
         return self.config["upgrade_cost"][self.level]
 

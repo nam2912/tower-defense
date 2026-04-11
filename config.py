@@ -1,10 +1,7 @@
 """Game configuration and constants.
 
-All game settings are stored in a dictionary returned by get_config().
-No global variables — config is passed through function parameters.
-
-Design patterns: Data-Driven Design, Dependency Injection.
-See REFERENCES.md for full citations.
+get_config() returns one big dict of settings; the rest of the game reads that
+dict from arguments instead of globals, so balancing mostly means editing here.
 """
 
 from enums import TowerType, EnemyType
@@ -30,7 +27,7 @@ def get_config():
             "rows": 10
         },
         "gameplay": {
-            "starting_gold": 260,
+            "starting_gold": 1000,
             "starting_lives": 1,
             "base_hp": 20,
             "base_upgrade_cost": [0, 150, 280, 450, 700],

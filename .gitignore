@@ -13,3 +13,8 @@ env/
 *.so
 .DS_Store
 Thumbs.db
+REFERENCES.md
+REQ.md
+.cursor/
+*.pdf
+docs/

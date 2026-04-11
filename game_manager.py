@@ -1,7 +1,7 @@
 """Game manager module.
 
-Controls game state (menu, playing, round complete, round failed, game over).
-Updates all entities each frame. Central coordinator for gameplay logic.
+Tracks game state (menu, playing, round complete, round failed, game over) and
+updates all entities each frame. This is the main hub that ties gameplay together.
 
 Kingdom Rush-style flow:
 - Base has HP; enemies deal damage when they reach the end.
@@ -9,9 +9,6 @@ Kingdom Rush-style flow:
 - Clearing all enemies completes the round — player proceeds to next.
 - Towers persist between rounds; enemies and projectiles reset.
 - Rounds are infinite with progressive scaling.
-
-Design patterns: Mediator, State Pattern.
-See REFERENCES.md for full citations.
 """
 
 import math
@@ -19,7 +16,7 @@ import pygame
 from enums import GameState, TowerType, EnemyType
 from game_map import GameMap
 from wave_manager import WaveManager
-from tower import create_tower, BarracksTower, NecromancerTower
+from tower import create_tower, BarracksTower, NecromancerTower, ArtilleryTower
 from renderer import Renderer
 
 
@@ -68,10 +65,17 @@ class GameManager:
         self.selected_tower_type = None
         self.selected_tower = None
         self.selected_base = False
+        self.selected_build_spot = None
         self.round_timer = 0.0
         self.game_speed = 1
         self.base_armor = config["gameplay"]["base_upgrade_armor"][0]
         self.idle_timer = 0.0
+        self.debug_mode = False
+        self.music_volume = 0.3
+        self.music_muted = False
+        self.wave_countdown = 0.0
+        self.wave_countdown_max = 60.0
+        self.gold_drip_accum = 0.0
         waypoints = self.game_map.get_path_pixel_waypoints()
         self.base_wp = waypoints[-1] if waypoints else None
 
@@ -110,11 +114,18 @@ class GameManager:
         """
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.selected_tower_type = None
-                self.selected_tower = None
-                self.selected_base = False
-            elif event.key == pygame.K_p:
-                self.state = GameState.PAUSED
+                if (self.selected_tower_type is not None
+                        or self.selected_tower is not None
+                        or self.selected_base
+                        or self.selected_build_spot is not None):
+                    self.selected_tower_type = None
+                    self.selected_tower = None
+                    self.selected_base = False
+                    self.selected_build_spot = None
+                else:
+                    self.state = GameState.PAUSED
+            elif event.key == pygame.K_F3:
+                self.debug_mode = not self.debug_mode
             elif event.key == pygame.K_1:
                 self._select_tower_type(TowerType.FORTRESS)
             elif event.key == pygame.K_2:
@@ -135,16 +146,53 @@ class GameManager:
                 self._select_tower_type(TowerType.TESLA)
             elif event.key == pygame.K_0:
                 self._select_tower_type(TowerType.NECROMANCER)
+            elif self.debug_mode and event.key == pygame.K_g:
+                self.gold += 500
+            elif self.debug_mode and event.key == pygame.K_k:
+                for enemy in self.enemies:
+                    enemy.is_alive = False
+            elif self.debug_mode and event.key == pygame.K_u:
+                self.highest_round = 999
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._handle_click(event.pos)
 
     def _handle_paused_event(self, event):
-        """Handle events in the paused state.
+        """Handle events in the paused state (settings menu).
 
         Args:
             event: A pygame event.
         """
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE or event.key == pygame.K_p:
+                self.state = GameState.PLAYING
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self._handle_settings_click(event.pos)
+
+    def _handle_settings_click(self, mouse_pos):
+        """Handle clicks on the settings/pause menu."""
+        rects = self.renderer.get_settings_rects()
+
+        if rects["mute"].collidepoint(mouse_pos):
+            self.music_muted = not self.music_muted
+            if self.music_muted:
+                pygame.mixer.music.set_volume(0)
+            else:
+                pygame.mixer.music.set_volume(self.music_volume)
+
+        if rects["vol_up"].collidepoint(mouse_pos):
+            self.music_volume = min(1.0, self.music_volume + 0.1)
+            if not self.music_muted:
+                pygame.mixer.music.set_volume(self.music_volume)
+
+        if rects["vol_down"].collidepoint(mouse_pos):
+            self.music_volume = max(0.0, self.music_volume - 0.1)
+            if not self.music_muted:
+                pygame.mixer.music.set_volume(self.music_volume)
+
+        if rects["debug"].collidepoint(mouse_pos):
+            self.debug_mode = not self.debug_mode
+
+        if rects["resume"].collidepoint(mouse_pos):
             self.state = GameState.PLAYING
 
     def _handle_round_complete_event(self, event):
@@ -210,11 +258,6 @@ class GameManager:
         Args:
             mouse_pos: Tuple (x, y) pixel position of click.
         """
-        skip_rect = self.renderer.get_skip_button_rect()
-        if skip_rect is not None and skip_rect.collidepoint(mouse_pos):
-            self._skip_remaining_enemies()
-            return
-
         speed_rect = self.renderer.get_speed_button_rect()
         if speed_rect.collidepoint(mouse_pos):
             self._toggle_speed()
@@ -257,6 +300,16 @@ class GameManager:
 
         self.selected_base = False
 
+        if self.selected_build_spot is not None:
+            build_menu_result = self._check_build_menu_click(mouse_pos)
+            if build_menu_result is not None:
+                bcol, brow = self.selected_build_spot
+                self.selected_tower_type = build_menu_result
+                self._try_place_tower(bcol, brow)
+                self.selected_build_spot = None
+                return
+            self.selected_build_spot = None
+
         col, row = self.game_map.get_grid_pos(mouse_pos[0], mouse_pos[1])
 
         if self.game_map.is_locked_spot(col, row):
@@ -265,6 +318,9 @@ class GameManager:
 
         if self.selected_tower_type is not None:
             self._try_place_tower(col, row)
+        elif self.game_map.is_build_spot(col, row):
+            self.selected_build_spot = (col, row)
+            self.selected_tower = None
         else:
             self._try_select_placed_tower(col, row)
 
@@ -357,6 +413,25 @@ class GameManager:
                 self.selected_tower = tower
                 break
 
+    def _check_build_menu_click(self, mouse_pos):
+        """Check if a click hit a tower option in the build menu popup.
+
+        Args:
+            mouse_pos: Tuple (x, y) pixel position of click.
+
+        Returns:
+            TowerType if a tower was clicked, else None.
+        """
+        if self.selected_build_spot is None:
+            return None
+        rects = self.renderer.get_build_menu_rects(self.selected_build_spot)
+        for tower_type, rect in rects:
+            if rect.collidepoint(mouse_pos) and self._is_tower_unlocked(tower_type):
+                cost = self.config["towers"][tower_type]["cost"]
+                if self.gold >= cost:
+                    return tower_type
+        return None
+
     def _try_upgrade_tower(self):
         """Attempt to upgrade the currently selected tower."""
         if self.selected_tower is None:
@@ -412,6 +487,12 @@ class GameManager:
         Args:
             dt: Delta time in seconds since last frame.
         """
+        if self.state == GameState.ROUND_COMPLETE:
+            self.wave_countdown -= dt
+            if self.wave_countdown <= 0:
+                self._begin_next_round()
+            return
+
         if self.state != GameState.PLAYING:
             return
 
@@ -455,6 +536,12 @@ class GameManager:
             if hasattr(tower, 'target') and tower.target is not None:
                 if tower.attack_cooldown >= tower.attack_speed - 0.05:
                     self._spawn_projectile(tower)
+                    if isinstance(tower, ArtilleryTower):
+                        splash_size = int(tower.splash_radius * tower.tile_size)
+                        self.renderer.spawn_effect(
+                            int(tower.target.x), int(tower.target.y),
+                            "explosion", max(48, splash_size)
+                        )
 
         for tower in self.towers:
             if isinstance(tower, NecromancerTower):
@@ -540,35 +627,13 @@ class GameManager:
             )
         self.towers = [t for t in self.towers if not t.is_destroyed]
 
-    def can_skip(self):
-        """Whether the skip button should be shown.
-
-        Visible when spawning is done and no enemies have been killed
-        for 8+ seconds, indicating a stalemate.
-        """
-        return (not self.wave_manager.wave_active
-                and len(self.enemies) > 0
-                and self.idle_timer >= 8.0)
-
-    def _skip_remaining_enemies(self):
-        """Kill all remaining enemies but apply base damage for each."""
-        for enemy in self.enemies:
-            if enemy.is_alive:
-                enemy.is_alive = False
-                damage = self._get_enemy_base_damage(enemy)
-                self.base_hp -= damage
-                if self.base_hp <= 0:
-                    self.base_hp = 0
-                    self.state = GameState.ROUND_FAILED
-                    return
-        self.enemies = []
-        self.idle_timer = 0.0
-
     def _on_round_clear(self):
-        """Handle a completed round — award bonus and show screen."""
+        """Handle a completed round — start countdown to next wave."""
         bonus = self.config["gameplay"]["round_bonus_gold"]
         self.gold += bonus
         self.highest_round = max(self.highest_round, self.current_round)
+        self.wave_countdown = self.wave_countdown_max
+        self.gold_drip_accum = 0.0
         self.state = GameState.ROUND_COMPLETE
 
     def render(self):
@@ -579,12 +644,17 @@ class GameManager:
             self._render_gameplay()
         elif self.state == GameState.PAUSED:
             self._render_gameplay()
-            self.renderer.draw_pause_overlay()
+            self.renderer.draw_pause_overlay(
+                music_muted=self.music_muted,
+                music_volume=self.music_volume,
+                debug_mode=self.debug_mode
+            )
         elif self.state == GameState.ROUND_COMPLETE:
             self._render_gameplay()
             self.renderer.draw_round_complete(
                 self.current_round,
-                self.config["gameplay"]["round_bonus_gold"]
+                self.config["gameplay"]["round_bonus_gold"],
+                int(self.wave_countdown)
             )
         elif self.state == GameState.ROUND_FAILED:
             self._render_gameplay()
@@ -620,9 +690,11 @@ class GameManager:
             game_speed=self.game_speed,
             base_level=self.base_level,
             selected_base=self.selected_base,
-            show_skip=self.can_skip(),
+            show_skip=False,
             base_armor=self.base_armor,
-            base_wp=self.base_wp
+            base_wp=self.base_wp,
+            selected_build_spot=self.selected_build_spot,
+            debug_mode=self.debug_mode
         )
 
     def _spawn_projectile(self, tower):
@@ -692,16 +764,23 @@ class GameManager:
         self.selected_tower_type = None
         self.selected_tower = None
         self.selected_base = False
+        self.selected_build_spot = None
         self.round_timer = 0.0
         self.game_speed = 1
         self.base_armor = self.config["gameplay"]["base_upgrade_armor"][0]
         self.idle_timer = 0.0
+        self.wave_countdown = 0.0
+        self.gold_drip_accum = 0.0
         waypoints = self.game_map.get_path_pixel_waypoints()
         self.base_wp = waypoints[-1] if waypoints else None
         self._begin_next_round()
 
     def _begin_next_round(self):
-        """Start the next round, keeping towers and base HP in place."""
+        """Start the next round. Bonus gold for time left on the countdown."""
+        early_bonus = max(0, int(self.wave_countdown))
+        if early_bonus > 0:
+            self.gold += early_bonus
+        self.wave_countdown = 0.0
         self.current_round += 1
         self.enemies = []
         self.projectiles = []

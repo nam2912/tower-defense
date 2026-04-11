@@ -1,11 +1,7 @@
 """Game map module.
 
-Manages the tile grid, enemy path waypoints, and valid tower build spots.
-Build spots are split into free (available at game start) and locked
-(require gold to unlock).
-
-Design patterns: Tile-Based Map.
-See REFERENCES.md for full citations.
+Tile grid, enemy path waypoints, and tower build slots. Some slots are free
+from the start; locked ones need gold before you can build there.
 """
 
 import random

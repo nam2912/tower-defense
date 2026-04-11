@@ -1,14 +1,10 @@
 """Soldier module.
 
-Soldier units spawned by Barracks towers. Uses a finite state machine:
+Soldier units spawned by Barracks towers. Each soldier has states:
 idle -> moving -> fighting -> dying.
 
-Soldiers BLOCK enemies on the path — when a soldier engages an enemy,
-the enemy stops advancing and fights the soldier instead. The soldier
-stays near its rally point and intercepts enemies that come within range.
-
-Design patterns: State Pattern (Finite State Machine).
-See REFERENCES.md for full citations.
+Soldiers block enemies on the path. When a soldier engages an enemy,
+the enemy stops advancing and fights the soldier instead.
 """
 
 import math
@@ -56,6 +52,7 @@ class Soldier:
         self.move_speed = 2.5
         self.is_alive = True
         self.engage_range = 80.0
+        self.heal_rate = hp * 0.05
 
     def update(self, enemies, dt):
         """Update soldier state each frame.
@@ -68,7 +65,7 @@ class Soldier:
             return
 
         if self.state == SoldierState.IDLE:
-            self._handle_idle(enemies)
+            self._handle_idle(enemies, dt)
         elif self.state == SoldierState.MOVING:
             self._handle_moving(dt)
         elif self.state == SoldierState.FIGHTING:
@@ -76,16 +73,8 @@ class Soldier:
         elif self.state == SoldierState.DYING:
             self._handle_dying()
 
-    def _handle_idle(self, enemies):
-        """Look for nearby enemies to intercept and block.
-
-        The soldier picks the closest enemy within engage_range
-        that is not already blocked by another soldier. When no
-        enemies remain, the soldier walks back to its rally point.
-
-        Args:
-            enemies: List of active Enemy instances.
-        """
+    def _handle_idle(self, enemies, dt):
+        """Look for nearby enemies. If none found, walk back and heal."""
         closest = self._find_closest_unblocked_enemy(enemies)
         if closest is not None:
             self.target = closest
@@ -94,6 +83,8 @@ class Soldier:
         else:
             any_alive = any(e.is_alive for e in enemies)
             self._return_to_rally(fast=not any_alive)
+            if self.hp < self.max_hp:
+                self.hp = min(self.max_hp, self.hp + self.heal_rate * dt)
 
     def _handle_moving(self, dt):
         """Move toward the target enemy to engage in melee.

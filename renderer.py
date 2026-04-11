@@ -1,17 +1,15 @@
 """Renderer module.
 
-Draws polished 2D sprites, environmental detail, health bars,
-projectile trails, floating damage numbers, and a refined UI.
-All drawing functions receive the surface and data as parameters.
-
-Design patterns: Separation of Concerns (Model-View).
-See REFERENCES.md for full citations.
+Draws polished 2D sprites, environmental detail, health bars, projectile trails,
+floating damage numbers, and a refined UI. Game logic stays in other modules;
+here we only paint using the surface and data passed in.
 """
 
 import math
 import random
 import pygame
 from enums import TowerType, EnemyType
+from effects import Effects
 
 
 class Renderer:
@@ -45,6 +43,7 @@ class Renderer:
         self.font_title = pygame.font.SysFont("Arial", 58, bold=True)
         self.font_dmg = pygame.font.SysFont("Arial", 18, bold=True)
         self.anim_tick = 0
+        self.effects = Effects()
         self.particles = []
         self.damage_numbers = []
         self.grass_cache = None
@@ -57,29 +56,18 @@ class Renderer:
         self._cached_grid = None
 
     def add_damage_number(self, x, y, amount, color=(255, 255, 80)):
-        """Add a floating damage number at the given position.
-
-        Args:
-            x: X pixel position.
-            y: Y pixel position.
-            amount: Damage amount to display.
-            color: RGB color tuple.
-        """
+        """Add a floating damage number at the given position."""
         self.damage_numbers.append({
             "x": x, "y": float(y), "amount": amount,
             "timer": 0.8, "color": color
         })
 
-    def add_particles(self, x, y, count, color, speed=2.0):
-        """Spawn particle effects at a position.
+    def spawn_effect(self, x, y, kind="explosion", size=64):
+        """Spawn a sprite animation at the given position."""
+        self.effects.spawn(x, y, kind, size)
 
-        Args:
-            x: X pixel position.
-            y: Y pixel position.
-            count: Number of particles.
-            color: Base RGB color.
-            speed: Particle speed.
-        """
+    def add_particles(self, x, y, count, color, speed=2.0):
+        """Spawn particle effects at a position."""
         for _ in range(count):
             angle = random.uniform(0, math.pi * 2)
             spd = random.uniform(speed * 0.3, speed)
@@ -92,7 +80,7 @@ class Renderer:
                 "size": random.randint(2, 4)
             })
 
-    def _update_particles(self, dt):
+    def _update_vfx(self, dt):
         """Update particle and damage number lifetimes."""
         alive = []
         for p in self.particles:
@@ -112,16 +100,14 @@ class Renderer:
                 alive_dmg.append(d)
         self.damage_numbers = alive_dmg
 
-    def _draw_particles_and_numbers(self):
+    def _draw_vfx(self):
         """Draw particles and floating damage numbers."""
         for p in self.particles:
-            alpha = min(255, int(p["timer"] * 500))
             size = max(1, p["size"] - int((0.6 - p["timer"]) * 3))
             pygame.draw.circle(self.screen, p["color"],
                                (int(p["x"]), int(p["y"])), size)
 
         for d in self.damage_numbers:
-            alpha_ratio = min(1.0, d["timer"] / 0.3)
             c = d["color"]
             text = self.font_dmg.render(str(d["amount"]), True, c)
             self.screen.blit(text, (int(d["x"]) - text.get_width() // 2,
@@ -136,12 +122,14 @@ class Renderer:
                   selected_tower_type, hover_pos, selected_tower,
                   tower_unlocks=None, round_timer=0.0, game_speed=1,
                   base_level=1, selected_base=False, show_skip=False,
-                  base_armor=0, base_wp=None):
+                  base_armor=0, base_wp=None, selected_build_spot=None,
+                  debug_mode=False):
         """Draw the complete game frame."""
         self.anim_tick += 1
         self._base_wp = base_wp
         dt = 1.0 / max(self.config["screen"]["fps"], 30)
-        self._update_particles(dt)
+        self.effects.update(dt)
+        self._update_vfx(dt)
         colors = self.config["colors"]
 
         self._draw_map(game_map, colors)
@@ -166,13 +154,21 @@ class Renderer:
         if selected_tower is not None:
             self._draw_tower_range(selected_tower)
 
-        self._draw_particles_and_numbers()
+        self.effects.draw(self.screen)
+        self._draw_vfx()
 
         self._draw_ui_panel(gold, base_hp, base_max_hp, round_number,
                             selected_tower_type, selected_tower, colors,
                             tower_unlocks, round_timer, game_speed,
                             base_level, selected_base, show_skip,
                             base_armor)
+
+        if selected_build_spot is not None:
+            self._draw_build_menu(selected_build_spot, gold, tower_unlocks)
+
+        if debug_mode:
+            self._draw_debug_overlay(gold, base_hp, base_max_hp,
+                                     round_number, len(towers), len(enemies))
 
     # ------------------------------------------------------------------
     # Map
@@ -2597,6 +2593,177 @@ class Renderer:
         pass
 
     # ------------------------------------------------------------------
+    # Build menu (click empty build spot to see tower options)
+    # ------------------------------------------------------------------
+
+    def _get_build_menu_tower_types(self):
+        """Return the ordered list of tower types for the build menu."""
+        return [
+            TowerType.FORTRESS, TowerType.ARCHER, TowerType.BARRACKS,
+            TowerType.MAGE, TowerType.ARTILLERY, TowerType.FREEZE,
+            TowerType.POISON, TowerType.BALLISTA, TowerType.TESLA,
+            TowerType.NECROMANCER, TowerType.LASER,
+        ]
+
+    def get_build_menu_rects(self, build_spot):
+        """Get clickable rectangles for each tower option in the build menu.
+
+        Args:
+            build_spot: (col, row) of the selected build spot.
+
+        Returns:
+            List of (TowerType, pygame.Rect) tuples.
+        """
+        if build_spot is None:
+            return []
+        col, row = build_spot
+        ts = self.tile_size
+        cx = col * ts + ts // 2
+        cy = row * ts + ts // 2
+        tower_types = self._get_build_menu_tower_types()
+
+        btn_w, btn_h = 44, 52
+        gap = 3
+        cols_per_row = 4
+        total_rows = (len(tower_types) + cols_per_row - 1) // cols_per_row
+        panel_w = cols_per_row * btn_w + (cols_per_row - 1) * gap + 16
+        panel_h = total_rows * btn_h + (total_rows - 1) * gap + 16
+
+        px = cx - panel_w // 2
+        py = cy - panel_h - 20
+        sw = self.config["screen"]["width"]
+        sh = self.config["screen"]["height"]
+        px = max(4, min(px, sw - panel_w - 4))
+        py = max(4, min(py, sh - panel_h - 4))
+
+        rects = []
+        for i, t_type in enumerate(tower_types):
+            r = i // cols_per_row
+            c = i % cols_per_row
+            bx = px + 8 + c * (btn_w + gap)
+            by = py + 8 + r * (btn_h + gap)
+            rects.append((t_type, pygame.Rect(bx, by, btn_w, btn_h)))
+        return rects
+
+    def _draw_build_menu(self, build_spot, gold, tower_unlocks=None):
+        """Draw the tower selection popup above a build spot.
+
+        Args:
+            build_spot: (col, row) of the selected build spot.
+            gold: Current player gold.
+            tower_unlocks: Dict of TowerType -> bool for unlock state.
+        """
+        rects = self.get_build_menu_rects(build_spot)
+        if not rects:
+            return
+
+        icon_colors = {
+            TowerType.FORTRESS: (130, 125, 115),
+            TowerType.ARCHER: (0, 160, 40),
+            TowerType.BARRACKS: (60, 90, 160),
+            TowerType.MAGE: (140, 60, 200),
+            TowerType.ARTILLERY: (180, 130, 30),
+            TowerType.FREEZE: (100, 180, 240),
+            TowerType.POISON: (80, 180, 50),
+            TowerType.BALLISTA: (160, 120, 40),
+            TowerType.TESLA: (60, 100, 220),
+            TowerType.NECROMANCER: (100, 50, 120),
+            TowerType.LASER: (220, 60, 60),
+        }
+
+        first_rect = rects[0][1]
+        last_rect = rects[-1][1]
+        panel = pygame.Rect(first_rect.x - 8, first_rect.y - 8,
+                            last_rect.right - first_rect.x + 16,
+                            last_rect.bottom - first_rect.y + 16)
+        bg = pygame.Surface((panel.w, panel.h), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (15, 12, 8, 210), (0, 0, panel.w, panel.h),
+                         border_radius=8)
+        pygame.draw.rect(bg, (160, 130, 70, 180), (0, 0, panel.w, panel.h),
+                         2, border_radius=8)
+        self.screen.blit(bg, panel)
+
+        mouse = pygame.mouse.get_pos()
+        for t_type, rect in rects:
+            unlocked = True
+            if tower_unlocks is not None:
+                unlocked = tower_unlocks.get(t_type, True)
+            cost = self.config["towers"][t_type]["cost"]
+            can_afford = gold >= cost and unlocked
+            hovering = rect.collidepoint(mouse)
+
+            if not unlocked:
+                bg_c = (35, 30, 25)
+                brd = (65, 55, 45)
+            elif hovering and can_afford:
+                bg_c = (70, 62, 48)
+                brd = (180, 160, 100)
+            elif can_afford:
+                bg_c = (50, 44, 35)
+                brd = (100, 88, 65)
+            else:
+                bg_c = (38, 33, 28)
+                brd = (70, 60, 48)
+
+            pygame.draw.rect(self.screen, bg_c, rect, border_radius=5)
+            pygame.draw.rect(self.screen, brd, rect, 2, border_radius=5)
+
+            icx = rect.centerx
+            icy = rect.centery - 5
+            ic = icon_colors.get(t_type, (100, 100, 100))
+            if not unlocked:
+                lock_r = self.config["tower_unlocks"].get(t_type, "?")
+                lt = self.font_tiny.render(f"R{lock_r}", True, (160, 120, 80))
+                self.screen.blit(lt, lt.get_rect(center=(icx, icy)))
+            else:
+                self._draw_tower_icon(t_type, icx, icy, ic)
+
+            cost_c = (255, 215, 50) if can_afford else (120, 100, 55)
+            if not unlocked:
+                cost_c = (100, 80, 55)
+            ct = self.font_tiny.render(f"{cost}", True, cost_c)
+            self.screen.blit(ct,
+                             ct.get_rect(center=(rect.centerx,
+                                                 rect.bottom - 8)))
+
+    # ------------------------------------------------------------------
+    # Debug overlay
+    # ------------------------------------------------------------------
+
+    def _draw_debug_overlay(self, gold, base_hp, base_max_hp,
+                            round_number, tower_count, enemy_count):
+        """Draw debug info panel in the top-right area."""
+        sw = self.config["screen"]["width"]
+        lines = [
+            "DEBUG [F3]",
+            f"Round: {round_number}",
+            f"Gold: {gold}",
+            f"HP: {base_hp}/{base_max_hp}",
+            f"Towers: {tower_count}",
+            f"Enemies: {enemy_count}",
+            "",
+            "[G] +500 gold",
+            "[K] Kill all enemies",
+            "[U] Unlock all towers",
+        ]
+        line_h = 16
+        panel_w = 160
+        panel_h = len(lines) * line_h + 12
+        px = sw - panel_w - 8
+        py = 100
+
+        bg = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 180))
+        self.screen.blit(bg, (px, py))
+        pygame.draw.rect(self.screen, (255, 80, 80),
+                         (px, py, panel_w, panel_h), 1, border_radius=4)
+
+        for i, line in enumerate(lines):
+            c = (255, 100, 100) if i == 0 else (220, 220, 200)
+            txt = self.font_tiny.render(line, True, c)
+            self.screen.blit(txt, (px + 8, py + 6 + i * line_h))
+
+    # ------------------------------------------------------------------
     # Overlay screens
     # ------------------------------------------------------------------
 
@@ -2716,34 +2883,44 @@ class Renderer:
                 ctrl_text.get_rect(center=(sw // 2, 380 + i * 24))
             )
 
-    def draw_round_complete(self, round_number, bonus_gold):
-        """Draw the round complete overlay."""
+    def draw_round_complete(self, round_number, bonus_gold, countdown=0):
+        """Draw the round complete overlay with wave countdown."""
         sw = self.config["screen"]["width"]
         sh = self.config["screen"]["height"]
         self.anim_tick += 1
-        self._draw_overlay_bg(160)
+        self._draw_overlay_bg(120)
 
         frame_w = min(560, sw - 40)
-        frame = pygame.Rect(sw // 2 - frame_w // 2, sh // 2 - 130,
-                            frame_w, 260)
+        frame = pygame.Rect(sw // 2 - frame_w // 2, sh // 2 - 150,
+                            frame_w, 320)
         self._draw_decorative_frame(frame, (60, 180, 60), (15, 30, 15))
 
         title = self.font_large.render(
             f"Round {round_number} Complete!", True, (100, 255, 100)
         )
         self.screen.blit(title,
-                         title.get_rect(center=(sw // 2, sh // 2 - 75)))
+                         title.get_rect(center=(sw // 2, sh // 2 - 110)))
 
         bonus = self.font_medium.render(
             f"+{bonus_gold} Gold Bonus!", True, (255, 215, 0)
         )
         self.screen.blit(bonus,
-                         bonus.get_rect(center=(sw // 2, sh // 2 - 20)))
+                         bonus.get_rect(center=(sw // 2, sh // 2 - 60)))
+
+        if countdown > 0:
+            timer_text = self.font_medium.render(
+                f"Next wave in {countdown}s",
+                True, (200, 220, 180)
+            )
+            self.screen.blit(timer_text,
+                             timer_text.get_rect(center=(sw // 2, sh // 2 - 15)))
 
         btn_w = min(340, frame_w - 40)
         btn = pygame.Rect(sw // 2 - btn_w // 2, sh // 2 + 30, btn_w, 50)
-        self._draw_button(btn,
-                          f"Next Round ({round_number + 1}) [SPACE]",
+        label = f"Send Early +{countdown}g ({round_number + 1}) [SPACE]"
+        if countdown <= 0:
+            label = f"Next Round ({round_number + 1}) [SPACE]"
+        self._draw_button(btn, label,
                           (40, 140, 40), (60, 180, 60), (100, 220, 100))
 
     def draw_round_failed(self, round_number):
@@ -2815,24 +2992,76 @@ class Renderer:
         self._draw_button(btn, "Restart [R]",
                           (60, 140, 60), (80, 180, 80), (120, 220, 120))
 
-    def draw_pause_overlay(self):
-        """Draw a pause overlay."""
+    def draw_pause_overlay(self, music_muted=False, music_volume=0.3,
+                           debug_mode=False):
+        """Draw the pause/settings menu."""
         sw = self.config["screen"]["width"]
         sh = self.config["screen"]["height"]
-        self._draw_overlay_bg(150)
+        self._draw_overlay_bg(170)
+        rects = self.get_settings_rects()
+        mouse = pygame.mouse.get_pos()
 
-        frame = pygame.Rect(sw // 2 - 160, sh // 2 - 60, 320, 120)
+        frame = pygame.Rect(sw // 2 - 180, sh // 2 - 160, 360, 340)
         self._draw_decorative_frame(frame, (100, 100, 120), (20, 20, 30))
 
-        text = self.font_title.render("PAUSED", True, (255, 255, 255))
-        self.screen.blit(text,
-                         text.get_rect(center=(sw // 2, sh // 2 - 15)))
+        title = self.font_title.render("PAUSED", True, (255, 255, 255))
+        self.screen.blit(title,
+                         title.get_rect(center=(sw // 2, sh // 2 - 125)))
 
-        hint = self.font_medium.render(
-            "Press [P] to resume", True, (170, 170, 180)
-        )
-        self.screen.blit(hint,
-                         hint.get_rect(center=(sw // 2, sh // 2 + 30)))
+        settings_label = self.font_medium.render(
+            "Settings", True, (200, 200, 210))
+        self.screen.blit(settings_label,
+                         settings_label.get_rect(center=(sw // 2, sh // 2 - 80)))
+
+        mute_r = rects["mute"]
+        mute_hover = mute_r.collidepoint(mouse)
+        mute_bg = (80, 50, 50) if music_muted else (50, 70, 50)
+        if mute_hover:
+            mute_bg = tuple(min(255, c + 30) for c in mute_bg)
+        pygame.draw.rect(self.screen, mute_bg, mute_r, border_radius=6)
+        pygame.draw.rect(self.screen, (160, 160, 170), mute_r, 2,
+                         border_radius=6)
+        mute_text = "Unmute" if music_muted else "Mute"
+        mt = self.font_small.render(mute_text, True, (255, 255, 255))
+        self.screen.blit(mt, mt.get_rect(center=mute_r.center))
+
+        vol_label = self.font_small.render(
+            f"Volume: {int(music_volume * 100)}%", True, (200, 200, 200))
+        self.screen.blit(vol_label, (sw // 2 - 60, sh // 2 - 37))
+
+        for key in ("vol_down", "vol_up"):
+            r = rects[key]
+            hov = r.collidepoint(mouse)
+            bg = (70, 70, 90) if hov else (45, 45, 60)
+            pygame.draw.rect(self.screen, bg, r, border_radius=6)
+            pygame.draw.rect(self.screen, (140, 140, 160), r, 2,
+                             border_radius=6)
+            sym = "-" if key == "vol_down" else "+"
+            st = self.font_medium.render(sym, True, (255, 255, 255))
+            self.screen.blit(st, st.get_rect(center=r.center))
+
+        dbg_r = rects["debug"]
+        dbg_hover = dbg_r.collidepoint(mouse)
+        dbg_bg = (50, 80, 50) if debug_mode else (45, 45, 60)
+        if dbg_hover:
+            dbg_bg = tuple(min(255, c + 30) for c in dbg_bg)
+        pygame.draw.rect(self.screen, dbg_bg, dbg_r, border_radius=6)
+        pygame.draw.rect(self.screen, (160, 160, 170), dbg_r, 2,
+                         border_radius=6)
+        check_label = "Debug: ON" if debug_mode else "Debug: OFF"
+        dt = self.font_small.render(check_label, True, (255, 255, 255))
+        self.screen.blit(dt, dt.get_rect(center=dbg_r.center))
+
+        if debug_mode:
+            cheats = self.font_tiny.render(
+                "[G] +500g  [K] Kill all  [U] Unlock towers",
+                True, (255, 180, 100))
+            self.screen.blit(cheats,
+                             cheats.get_rect(center=(sw // 2, sh // 2 + 73)))
+
+        resume_r = rects["resume"]
+        self._draw_button(resume_r, "Resume [ESC]",
+                          (40, 100, 40), (60, 140, 60), (100, 200, 100))
 
     # ------------------------------------------------------------------
     # Button rect helpers
@@ -2927,3 +3156,16 @@ class Renderer:
         """Get the skip button rectangle (below speed/pause buttons)."""
         screen_w = self.config["screen"]["width"]
         return pygame.Rect(screen_w - 90, 60, 80, 30)
+
+    def get_settings_rects(self):
+        """Get clickable rectangles for the pause/settings menu."""
+        sw = self.config["screen"]["width"]
+        sh = self.config["screen"]["height"]
+        cx = sw // 2
+        return {
+            "mute": pygame.Rect(cx - 50, sh // 2 - 60, 100, 30),
+            "vol_down": pygame.Rect(cx - 85, sh // 2 - 20, 36, 28),
+            "vol_up": pygame.Rect(cx + 50, sh // 2 - 20, 36, 28),
+            "debug": pygame.Rect(cx - 70, sh // 2 + 15, 140, 30),
+            "resume": pygame.Rect(cx - 120, sh // 2 + 100, 240, 50),
+        }

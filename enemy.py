@@ -1,10 +1,7 @@
 """Enemy module.
 
-Defines the Enemy class and a factory function to create enemies
-by type and wave scaling.
-
-Design patterns: Factory Method.
-See REFERENCES.md for full citations.
+Enemy class plus a factory-style function that spawns the right enemy type
+with HP and stats scaled to the current wave.
 """
 
 import math

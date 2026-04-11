@@ -1,12 +1,10 @@
 """Tower Defense Game - Main Entry Point.
 
-Initializes Pygame, sets up the game loop, and delegates to GameManager
-for event handling, updates, and rendering. No global variables are used.
-
-Design patterns: Game Loop.
-See REFERENCES.md for full citations.
+Starts Pygame, runs the main loop, and lets GameManager handle events, updates,
+and drawing. Game state is not kept in module-level globals.
 """
 
+import os
 import pygame
 import sys
 from config import get_config
@@ -56,11 +54,21 @@ def run_game_loop(screen, config):
         pygame.display.flip()
 
 
+def start_music():
+    """Load and play background music if the file exists."""
+    music_path = os.path.join(os.path.dirname(__file__), "assets", "gameplay_music.mp3")
+    if os.path.exists(music_path):
+        pygame.mixer.music.load(music_path)
+        pygame.mixer.music.set_volume(0.3)
+        pygame.mixer.music.play(-1)
+
+
 def main():
     """Initialize Pygame and start the game."""
     pygame.init()
     config = get_config()
     screen = create_screen(config)
+    start_music()
 
     run_game_loop(screen, config)
 
