@@ -90,13 +90,27 @@ class GameMap:
                 self.grid[row_start][c] = 1
 
     def _generate_build_spots(self):
-        """Generate valid build spots adjacent to the path."""
+        """Generate valid build spots adjacent to the path.
+
+        Produces roughly half the possible adjacent tiles, distributed
+        evenly along the path so that the start, middle, and end all
+        have buildable locations.
+        """
         path_tiles = set()
         for r in range(self.rows):
             for c in range(self.cols):
                 if self.grid[r][c] == 1:
                     path_tiles.add((c, r))
 
+        spawn_col, spawn_row = self.path_waypoints[0]
+        base_col, base_row = self.path_waypoints[-1]
+        exclusion = set()
+        for ec, er in [(spawn_col, spawn_row), (base_col, base_row)]:
+            for dc in range(-1, 2):
+                for dr in range(-1, 2):
+                    exclusion.add((ec + dc, er + dr))
+
+        all_candidates = []
         for col, row in path_tiles:
             neighbors = [
                 (col - 1, row), (col + 1, row),
@@ -106,8 +120,60 @@ class GameMap:
                 if (0 <= nc < self.cols and 0 <= nr < self.rows
                         and self.grid[nr][nc] == 0
                         and (nc, nr) not in path_tiles
-                        and (nc, nr) not in self.build_spots):
-                    self.build_spots.append((nc, nr))
+                        and (nc, nr) not in all_candidates
+                        and (nc, nr) not in exclusion):
+                    all_candidates.append((nc, nr))
+
+        target = max(8, len(all_candidates) * 6 // 10)
+
+        path_order = self._get_path_tile_order()
+        scored = []
+        for spot in all_candidates:
+            best = self.cols + self.rows
+            for idx, pt in enumerate(path_order):
+                d = abs(spot[0] - pt[0]) + abs(spot[1] - pt[1])
+                if d < best:
+                    best = d
+                    score = idx
+            scored.append((score, spot))
+        scored.sort(key=lambda t: t[0])
+
+        rng = random.Random(42)
+        n_zones = 5
+        zone_size = max(1, len(scored) // n_zones)
+        selected = []
+        for z in range(n_zones):
+            start = z * zone_size
+            end = min(len(scored), start + zone_size)
+            zone = [s[1] for s in scored[start:end]]
+            rng.shuffle(zone)
+            pick = max(1, len(zone) * target // len(all_candidates))
+            selected.extend(zone[:pick])
+
+        remaining = [s[1] for s in scored if s[1] not in selected]
+        rng.shuffle(remaining)
+        while len(selected) < target and remaining:
+            selected.append(remaining.pop())
+
+        self.build_spots = selected
+
+    def _get_path_tile_order(self):
+        """Return path tiles in walk order from start to end."""
+        ordered = []
+        for i in range(len(self.path_waypoints) - 1):
+            sc, sr = self.path_waypoints[i]
+            ec, er = self.path_waypoints[i + 1]
+            if sc == ec:
+                step = 1 if er > sr else -1
+                for r in range(sr, er + step, step):
+                    if (sc, r) not in ordered:
+                        ordered.append((sc, r))
+            else:
+                step = 1 if ec > sc else -1
+                for c in range(sc, ec + step, step):
+                    if (c, sr) not in ordered:
+                        ordered.append((c, sr))
+        return ordered
 
     def _split_free_locked(self, free_count):
         """Split generated build spots into free and locked sets.

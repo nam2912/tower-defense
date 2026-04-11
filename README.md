@@ -102,18 +102,43 @@ tower-defense/
 ├── main.py              # Entry point, game loop (fixed-timestep)
 ├── config.py            # Data-driven game configuration (no globals)
 ├── enums.py             # TowerType, EnemyType, GameState, SoldierState
-├── game_manager.py      # Central game state coordinator (Mediator)
+│
+├── game_manager.py      # Game state machine, update loop, render delegation
+├── game_input.py        # GameInputMixin — event / click handlers
 ├── game_map.py          # Tile grid, path waypoints, build spots
-├── tower.py             # Tower base class + 9 subclasses + factory
+│
+├── tower.py             # Base Tower class + create_tower factory
+├── tower_special.py     # Specialized tower subclasses (9 types)
 ├── enemy.py             # Enemy class + factory with round scaling
 ├── soldier.py           # Soldier AI finite state machine
 ├── wave_manager.py      # Wave spawning and round generation
-├── renderer.py          # All Pygame rendering and UI drawing
+│
+├── renderer.py          # Core Renderer — map, spawn, castle, VFX
+├── rendering/           # Renderer mixin package
+│   ├── __init__.py      # Package exports
+│   ├── draw_entities.py # Towers, enemies, soldiers, projectiles
+│   ├── draw_hud.py      # HUD, tower bar, radial menus, debug overlay
+│   └── draw_overlays.py # Menu, pause, round complete/fail, game over
+│
+├── asset_loader.py      # Load and cache all sprites from assets/
+├── effects.py           # Procedural particle effects
+│
+├── assets/              # All game sprites, fonts, and effects
+│   ├── terrain/         # Grass, path tiles, platforms, decorations
+│   ├── towers/          # Tower turrets and base sprites
+│   ├── enemies/         # Enemy character sprites
+│   ├── soldiers/        # Barracks soldier sprites (idle, fight)
+│   ├── projectiles/     # Bullet sprites
+│   ├── effects/         # Particle sprites, portal
+│   └── ui/              # Buttons, icons, panels, castle, fonts
+│
 ├── requirements.txt     # Dependencies (pygame>=2.5.0)
 ├── README.md            # This file
 ├── REQ.md               # Assignment requirements and rubric
 └── REFERENCES.md        # Design pattern citations and asset sources
 ```
+
+Each source file stays within **300–500 lines** for readability.
 
 ---
 
@@ -121,18 +146,20 @@ tower-defense/
 
 | Pattern | Module | Purpose |
 | --- | --- | --- |
-| Factory Method | `enemy.py`, `tower.py` | Create entities by type without exposing construction |
+| Factory Method | `tower.py`, `enemy.py` | Create entities by type without exposing construction |
 | State (FSM) | `soldier.py`, `game_manager.py` | Discrete state transitions with dedicated handlers |
 | Mediator | `game_manager.py` | Central coordinator preventing direct module coupling |
-| Inheritance / Polymorphism | `tower.py` | 9 tower subclasses override attack/upgrade behavior |
+| Mixin Classes | `game_input.py`, `rendering/` | Split large classes into focused, composable units |
+| Inheritance / Polymorphism | `tower.py`, `tower_special.py` | 9 tower subclasses override attack/upgrade behavior |
 | Game Loop | `main.py` | Fixed-timestep input/update/render cycle |
 | Data-Driven Design | `config.py` | All balance data in a dictionary, not hard-coded |
 | Dependency Injection | All modules | Config passed via constructors, no global variables |
-| Separation of Concerns | `renderer.py` | Rendering isolated from game logic (Model-View) |
+| Separation of Concerns | `renderer.py`, `rendering/` | Rendering isolated from game logic (Model-View) |
 | Queue-Based Spawning | `wave_manager.py` | Wave as a queue of enemy types dequeued at intervals |
 | Surface Caching | `renderer.py` | Pre-rendered terrain cache for performance |
-| Particle System | `renderer.py` | Lightweight transient visual effects |
+| Particle System | `renderer.py`, `effects.py` | Lightweight transient visual effects |
 | Build Slot Economy | `game_map.py` | Free/locked build spots with gold unlock cost |
+| Asset Loader (Flyweight) | `asset_loader.py` | Single-load sprite cache shared by renderer |
 
 Full citations with academic sources are in `REFERENCES.md`.
 
@@ -142,7 +169,7 @@ Full citations with academic sources are in `REFERENCES.md`.
 
 This project satisfies all 7 core requirements from the assignment brief:
 
-1. **Functional decomposition** — 10 modules, each with focused functions
+1. **Functional decomposition** — 17 modules, each with focused functions (300–500 lines max)
 2. **Arrays and records** — lists for entities, classes for structured data
 3. **Structured programming** — sequence, selection, repetition throughout
 4. **Coding conventions** — snake_case functions, PascalCase classes, consistent formatting
@@ -157,6 +184,11 @@ This project satisfies all 7 core requirements from the assignment brief:
 - **Python** >= 3.10
 - **Pygame** >= 2.5.0
 
-No other third-party libraries are used. All sprites and visual effects
-are drawn procedurally using Pygame primitives — no external image,
-sound, or font assets are bundled.
+No other third-party libraries are used.
+
+## Asset Credits
+
+All sprites, fonts, and visual effects in `assets/` are sourced from
+**Kenney** (kenney.nl) via OpenGameArt.org under the **CC0 1.0** license
+(public domain). Explosion/impact sprite sheets by **Soluna Software**
+(CC0). Full citations with URLs are in `REFERENCES.md`.
