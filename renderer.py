@@ -12,7 +12,6 @@ import math
 import os
 import random
 import pygame
-from enums import TowerType
 from effects import Effects
 from asset_loader import AssetLoader
 from rendering.draw_entities import RendererEntitiesMixin
@@ -33,6 +32,7 @@ class _SafeFont:
     """
 
     def __init__(self, font):
+        """Wrap a pygame font for colorkey-based transparency."""
         self._font = font
 
     def render(self, text, antialias=True, color=(255, 255, 255),
@@ -45,6 +45,7 @@ class _SafeFont:
         return surf
 
     def __getattr__(self, name):
+        """Delegate attribute access to the wrapped font."""
         return getattr(self._font, name)
 
 
@@ -225,7 +226,7 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
     # ------------------------------------------------------------------
 
     def _draw_map(self, game_map):
-        """Draw the tile grid with KR-style trench paths."""
+        """Draw the tile grid with KR-style trench paths (cached)."""
         ts = self.tile_size
         cache_key = (id(game_map), len(game_map.locked_spots),
                      len(game_map.build_spots))
@@ -243,85 +244,96 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
                     if game_map.grid[r][c] == 1:
                         path_set.add((c, r))
 
-            for row in range(game_map.rows):
-                for col in range(game_map.cols):
-                    px = col * ts
-                    py = row * ts
-                    self.grass_cache.blit(
-                        self.assets.terrain["grass"], (px, py))
-
-            edge = 5
-            dirt = (175, 140, 90)
-            dirt_dark = (145, 115, 70)
-            shadow = (120, 95, 55)
-            highlight = (195, 165, 115)
-
-            for col, row in path_set:
-                px, py = col * ts, row * ts
-                self.grass_cache.fill(dirt, (px, py, ts, ts))
-
-                top = (col, row - 1) in path_set
-                bot = (col, row + 1) in path_set
-                left = (col - 1, row) in path_set
-                right = (col + 1, row) in path_set
-
-                if not top:
-                    pygame.draw.rect(self.grass_cache, shadow,
-                                     (px, py, ts, edge))
-                    pygame.draw.line(self.grass_cache, (90, 130, 55),
-                                     (px, py), (px + ts, py), 2)
-                if not bot:
-                    pygame.draw.rect(self.grass_cache, highlight,
-                                     (px, py + ts - edge, ts, edge))
-                    pygame.draw.line(self.grass_cache, (90, 130, 55),
-                                     (px, py + ts - 1),
-                                     (px + ts, py + ts - 1), 2)
-                if not left:
-                    pygame.draw.rect(self.grass_cache, shadow,
-                                     (px, py, edge, ts))
-                    pygame.draw.line(self.grass_cache, (90, 130, 55),
-                                     (px, py), (px, py + ts), 2)
-                if not right:
-                    pygame.draw.rect(self.grass_cache, highlight,
-                                     (px + ts - edge, py, edge, ts))
-                    pygame.draw.line(self.grass_cache, (90, 130, 55),
-                                     (px + ts - 1, py),
-                                     (px + ts - 1, py + ts), 2)
-
-                rng = __import__('random').Random(col * 31 + row * 17)
-                for _ in range(4):
-                    gx = px + rng.randint(edge, ts - edge - 1)
-                    gy = py + rng.randint(edge, ts - edge - 1)
-                    pygame.draw.circle(self.grass_cache, dirt_dark,
-                                       (gx, gy), 1)
-
-            for row in range(game_map.rows):
-                for col in range(game_map.cols):
-                    if (col, row) in path_set:
-                        continue
-                    px = col * ts
-                    py = row * ts
-                    is_build = (col, row) in build_set
-                    is_locked = (col, row) in locked_set
-                    if is_build or is_locked:
-                        key = ("platform_locked" if is_locked
-                               else "platform")
-                        self.grass_cache.blit(
-                            self.assets.terrain[key], (px, py))
-                    else:
-                        near_path = any(
-                            (col + dc, row + dr) in path_set
-                            for dc in range(-1, 2)
-                            for dr in range(-1, 2)
-                            if dc or dr
-                        )
-                        if near_path:
-                            continue
-                        deco = self.assets.get_decoration(col, row)
-                        dx = px + (ts - deco.get_width()) // 2
-                        dy = py + (ts - deco.get_height()) // 2
-                        self.grass_cache.blit(deco, (dx, dy))
+            self._draw_grass_layer(game_map, ts)
+            self._draw_path_layer(path_set, ts)
+            self._draw_platform_layer(game_map, path_set, build_set,
+                                      locked_set, ts)
         self.screen.blit(self.grass_cache, (0, 0))
+
+    def _draw_grass_layer(self, game_map, ts):
+        """Fill the cache with grass tiles."""
+        for row in range(game_map.rows):
+            for col in range(game_map.cols):
+                self.grass_cache.blit(
+                    self.assets.terrain["grass"], (col * ts, row * ts))
+
+    def _draw_path_layer(self, path_set, ts):
+        """Draw trench-style dirt path with edge shading."""
+        edge = 5
+        dirt = (175, 140, 90)
+        dirt_dark = (145, 115, 70)
+        shadow = (120, 95, 55)
+        highlight = (195, 165, 115)
+        grass_edge = (90, 130, 55)
+
+        for col, row in path_set:
+            px, py = col * ts, row * ts
+            self.grass_cache.fill(dirt, (px, py, ts, ts))
+
+            top = (col, row - 1) in path_set
+            bot = (col, row + 1) in path_set
+            left = (col - 1, row) in path_set
+            right = (col + 1, row) in path_set
+
+            if not top:
+                pygame.draw.rect(self.grass_cache, shadow,
+                                 (px, py, ts, edge))
+                pygame.draw.line(self.grass_cache, grass_edge,
+                                 (px, py), (px + ts, py), 2)
+            if not bot:
+                pygame.draw.rect(self.grass_cache, highlight,
+                                 (px, py + ts - edge, ts, edge))
+                pygame.draw.line(self.grass_cache, grass_edge,
+                                 (px, py + ts - 1),
+                                 (px + ts, py + ts - 1), 2)
+            if not left:
+                pygame.draw.rect(self.grass_cache, shadow,
+                                 (px, py, edge, ts))
+                pygame.draw.line(self.grass_cache, grass_edge,
+                                 (px, py), (px, py + ts), 2)
+            if not right:
+                pygame.draw.rect(self.grass_cache, highlight,
+                                 (px + ts - edge, py, edge, ts))
+                pygame.draw.line(self.grass_cache, grass_edge,
+                                 (px + ts - 1, py),
+                                 (px + ts - 1, py + ts), 2)
+
+            rng = random.Random(col * 31 + row * 17)
+            for _ in range(4):
+                gx = px + rng.randint(edge, ts - edge - 1)
+                gy = py + rng.randint(edge, ts - edge - 1)
+                pygame.draw.circle(self.grass_cache, dirt_dark,
+                                   (gx, gy), 1)
+
+    def _draw_platform_layer(self, game_map, path_set, build_set,
+                             locked_set, ts):
+        """Draw build platforms and decorations on non-path tiles."""
+        for row in range(game_map.rows):
+            for col in range(game_map.cols):
+                if (col, row) in path_set:
+                    continue
+                px = col * ts
+                py = row * ts
+                is_build = (col, row) in build_set
+                is_locked = (col, row) in locked_set
+                if is_build or is_locked:
+                    key = ("platform_locked" if is_locked
+                           else "platform")
+                    self.grass_cache.blit(
+                        self.assets.terrain[key], (px, py))
+                else:
+                    near_path = any(
+                        (col + dc, row + dr) in path_set
+                        for dc in range(-1, 2)
+                        for dr in range(-1, 2)
+                        if dc or dr
+                    )
+                    if near_path:
+                        continue
+                    deco = self.assets.get_decoration(col, row)
+                    dx = px + (ts - deco.get_width()) // 2
+                    dy = py + (ts - deco.get_height()) // 2
+                    self.grass_cache.blit(deco, (dx, dy))
 
     # ------------------------------------------------------------------
     # Base castle (sprite-based)

@@ -7,6 +7,7 @@ from enums import TowerType
 
 
 class RendererEntitiesMixin:
+    """Mixin providing tower, enemy, soldier, and projectile drawing."""
 
     def _draw_towers(self, towers):
         """Draw all towers using sprite assets."""

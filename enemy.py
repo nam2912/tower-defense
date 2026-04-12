@@ -5,7 +5,6 @@ with HP and stats scaled to the current wave.
 """
 
 import math
-from enums import EnemyType
 
 
 class Enemy:

@@ -1,11 +1,11 @@
 """Mixin for HUD elements: tower bar, radial menus, info boxes, debug."""
 
-import math
 import pygame
 from enums import TowerType
 
 
 class RendererHudMixin:
+    """Mixin providing HUD elements: tower bar, radial menus, debug overlay."""
 
     def _draw_ui_panel(self, gold, base_hp, base_max_hp, round_number,
                        selected_tower_type, selected_tower,

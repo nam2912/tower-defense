@@ -7,6 +7,7 @@ from enums import TowerType
 
 
 class RendererOverlaysMixin:
+    """Mixin providing overlay screens: menu, pause, round failed, buttons."""
 
     # ------------------------------------------------------------------
     # Overlay screens

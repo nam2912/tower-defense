@@ -7,14 +7,9 @@ dict from arguments instead of globals, so balancing mostly means editing here.
 from enums import TowerType, EnemyType
 
 
-def get_config():
-    """Return the complete game configuration dictionary.
-
-    Returns:
-        dict: All game settings including screen, gameplay, tower stats,
-              enemy stats, and unlock rules.
-    """
-    config = {
+def _screen_config():
+    """Return screen and grid settings."""
+    return {
         "screen": {
             "width": 1200,
             "height": 800,
@@ -26,6 +21,12 @@ def get_config():
             "cols": 15,
             "rows": 10
         },
+    }
+
+
+def _gameplay_config():
+    """Return gameplay balance settings."""
+    return {
         "gameplay": {
             "starting_gold": 400,
             "starting_lives": 1,
@@ -52,7 +53,19 @@ def get_config():
             TowerType.NECROMANCER: 25,
             TowerType.LASER: 30,
         },
-        "towers": {
+    }
+
+
+def _tower_stats():
+    """Return tower stat tables keyed by TowerType."""
+    stats = _base_tower_stats()
+    stats.update(_advanced_tower_stats())
+    return stats
+
+
+def _base_tower_stats():
+    """Return stats for Fortress, Archer, Barracks, Mage, and Artillery."""
+    return {
             TowerType.FORTRESS: {
                 "cost": 40,
                 "damage": [3, 4, 6, 8, 11, 15, 21, 29, 40, 55, 76, 105, 145, 200, 276],
@@ -107,6 +120,12 @@ def get_config():
                 "tower_armor": [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7],
                 "description": "Slow AOE splash damage"
             },
+        }
+
+
+def _advanced_tower_stats():
+    """Return stats for Freeze, Poison, Ballista, Tesla, Necromancer, Laser."""
+    return {
             TowerType.FREEZE: {
                 "cost": 120,
                 "damage": [6, 9, 13, 18, 25, 35, 49, 69, 97, 135, 190, 266, 372, 521, 729],
@@ -178,8 +197,12 @@ def get_config():
                 "tower_armor": [0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5],
                 "description": "High damage beam (R30)"
             },
-        },
-        "enemies": {
+        }
+
+
+def _enemy_stats():
+    """Return enemy stat tables keyed by EnemyType."""
+    return {
             EnemyType.GRUNT: {
                 "hp": 80,
                 "speed": 1.3,
@@ -211,8 +234,12 @@ def get_config():
                 "armor": 15,
                 "gold_reward": 65
             }
-        },
-        "colors": {
+        }
+
+
+def _color_config():
+    """Return UI colour palette."""
+    return {
             "background": (34, 139, 34),
             "path": (139, 119, 101),
             "grid_line": (200, 200, 200),
@@ -229,5 +256,21 @@ def get_config():
             "button_hover": (100, 160, 210),
             "menu_bg": (20, 20, 40)
         }
-    }
+
+
+def get_config():
+    """Return the complete game configuration dictionary.
+
+    Composes screen, gameplay, tower, enemy, and colour sub-configs
+    into a single dict passed to every subsystem via constructor injection.
+
+    Returns:
+        dict: All game settings.
+    """
+    config = {}
+    config.update(_screen_config())
+    config.update(_gameplay_config())
+    config["towers"] = _tower_stats()
+    config["enemies"] = _enemy_stats()
+    config["colors"] = _color_config()
     return config

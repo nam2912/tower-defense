@@ -160,29 +160,41 @@ class GameInputMixin:
         Args:
             mouse_pos: Tuple (x, y) pixel position of click.
         """
+        if self._handle_click_prep_phase(mouse_pos):
+            return
+        if self._handle_click_hud_buttons(mouse_pos):
+            return
+        if self._handle_click_radial_menus(mouse_pos):
+            return
+        self._handle_click_grid(mouse_pos)
+
+    def _handle_click_prep_phase(self, mouse_pos):
+        """Handle prep-phase-specific clicks (next wave, tower move)."""
         if self.prep_phase:
             nw_rect = self.renderer.get_next_wave_button_rect()
             if nw_rect.collidepoint(mouse_pos):
                 self._begin_next_round()
-                return
-
+                return True
         if self.prep_phase and self.moving_tower is not None:
             col, row = self.game_map.get_grid_pos(
                 mouse_pos[0], mouse_pos[1])
             if self.game_map.is_build_spot(col, row):
                 self._move_tower_to(col, row)
-                return
+                return True
             self.moving_tower = None
+        return False
 
+    def _handle_click_hud_buttons(self, mouse_pos):
+        """Handle speed, pause, and tower-bar button clicks."""
         speed_rect = self.renderer.get_speed_button_rect()
         if speed_rect.collidepoint(mouse_pos):
             self._toggle_speed()
-            return
+            return True
 
         pause_rect = self.renderer.get_pause_button_rect()
         if pause_rect.collidepoint(mouse_pos):
             self.state = GameState.PAUSED
-            return
+            return True
 
         button_rects = self.renderer.get_tower_button_rects()
         for tower_type, rect in button_rects:
@@ -190,8 +202,11 @@ class GameInputMixin:
                 self._select_tower_type(tower_type)
                 self.selected_tower = None
                 self.selected_base = False
-                return
+                return True
+        return False
 
+    def _handle_click_radial_menus(self, mouse_pos):
+        """Handle clicks on tower upgrade/sell and base upgrade radials."""
         if self.selected_tower is not None:
             upg_rect = self.renderer.get_upgrade_button_rect(
                 self.selected_tower)
@@ -199,23 +214,26 @@ class GameInputMixin:
                 self.selected_tower)
             if upg_rect.collidepoint(mouse_pos):
                 self._try_upgrade_tower()
-                return
+                return True
             if sell_rect.collidepoint(mouse_pos):
                 self._try_sell_tower()
-                return
+                return True
 
         if self.selected_base:
             base_upg = self.renderer.get_base_upgrade_button_rect()
             if base_upg is not None and base_upg.collidepoint(mouse_pos):
                 self._try_upgrade_base()
-                return
+                return True
 
         if self._is_base_click(mouse_pos):
             self.selected_base = True
             self.selected_tower = None
             self.selected_tower_type = None
-            return
+            return True
+        return False
 
+    def _handle_click_grid(self, mouse_pos):
+        """Handle clicks on the map grid (build, select, unlock)."""
         self.selected_base = False
 
         if self.selected_build_spot is not None:
