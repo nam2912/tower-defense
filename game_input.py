@@ -137,21 +137,11 @@ class GameInputMixin:
         Args:
             event: A pygame event.
         """
-        activated = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-            activated = True
+            self._full_restart()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            btn = self.renderer.get_retry_button_rect()
+            btn = self.renderer.get_full_restart_button_rect()
             if btn.collidepoint(event.pos):
-                activated = True
-
-        if activated:
-            self._retry_round()
-            return
-
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            full_btn = self.renderer.get_full_restart_button_rect()
-            if full_btn.collidepoint(event.pos):
                 self._full_restart()
 
     def _handle_click(self, mouse_pos):

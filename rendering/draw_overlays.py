@@ -199,7 +199,7 @@ class RendererOverlaysMixin:
         max_w = max(title_surf.get_width(), info_surf.get_width())
         btn_w = 220
         frame_w = min(max(max_w + 60, btn_w + 60), sw - 40)
-        frame_h = 240
+        frame_h = 200
         fy = sh // 2 - frame_h // 2
 
         frame = pygame.Rect(cx - frame_w // 2, fy, frame_w, frame_h)
@@ -210,13 +210,9 @@ class RendererOverlaysMixin:
         self.screen.blit(info_surf,
                          info_surf.get_rect(center=(cx, fy + 80)))
 
-        retry_btn = pygame.Rect(cx - btn_w // 2, fy + 110, btn_w, 42)
-        self._draw_button(retry_btn, "Retry [R]",
+        restart_btn = pygame.Rect(cx - btn_w // 2, fy + 120, btn_w, 42)
+        self._draw_button(restart_btn, "Restart [R]",
                           (140, 90, 30), (180, 120, 40), (220, 160, 60))
-
-        restart_btn = pygame.Rect(cx - btn_w // 2, fy + 166, btn_w, 42)
-        self._draw_button(restart_btn, "Restart",
-                          (50, 50, 70), (70, 70, 90), (110, 110, 130))
 
     def draw_pause_overlay(self, music_muted=False, music_volume=0.3,
                            debug_mode=False):
@@ -358,15 +354,14 @@ class RendererOverlaysMixin:
         return pygame.Rect(bx - btn_w // 2, by - ring_r - btn_h // 2,
                            btn_w, btn_h)
 
-    def get_retry_button_rect(self):
-        """Get the 'Retry' button rectangle."""
-        sh = self.config["screen"]["height"]
-        return self._get_centered_button_rect(sh // 2 + 10)
-
     def get_full_restart_button_rect(self):
-        """Get the 'Full Restart' button on round failed screen."""
+        """Get the 'Restart' button on the round failed screen."""
+        sw = self.config["screen"]["width"]
         sh = self.config["screen"]["height"]
-        return self._get_centered_button_rect(sh // 2 + 80)
+        btn_w = 220
+        frame_h = 200
+        fy = sh // 2 - frame_h // 2
+        return pygame.Rect(sw // 2 - btn_w // 2, fy + 120, btn_w, 42)
 
     def get_speed_button_rect(self):
         """Get the speed toggle button rectangle (top-right)."""

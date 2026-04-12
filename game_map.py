@@ -70,7 +70,7 @@ class GameMap:
             end = self.path_waypoints[i + 1]
             self._mark_line(start, end)
 
-    def _mark_line(self, start, end):
+    def _mark_line(self, start, end):                                                                                                                           
         """Mark a straight line between two waypoints on the grid.
 
         Args:

@@ -5,7 +5,7 @@ updates all entities each frame. This is the main hub that ties gameplay togethe
 
 Kingdom Rush-style flow:
 - Base has HP; enemies deal damage when they reach the end.
-- Losing all base HP fails the round — player retries the same round.
+- Losing all base HP ends the game — player must restart from round 1.
 - Clearing all enemies completes the round — player proceeds to next.
 - Towers persist between rounds; enemies and projectiles reset.
 - Rounds are infinite with progressive scaling.
@@ -402,16 +402,6 @@ class GameManager(GameInputMixin):
         self.current_round += 1
         self.enemies = []
         self.projectiles = []
-        self.round_timer = 0.0
-        self._reset_soldiers()
-        self.wave_manager.start_round(self.current_round)
-        self.state = GameState.PLAYING
-
-    def _retry_round(self):
-        """Retry the current round — reset enemies and base HP."""
-        self.enemies = []
-        self.projectiles = []
-        self.base_hp = self.base_max_hp
         self.round_timer = 0.0
         self._reset_soldiers()
         self.wave_manager.start_round(self.current_round)
