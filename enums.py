@@ -36,9 +36,7 @@ class GameState(Enum):
     MENU = auto()
     PLAYING = auto()
     PAUSED = auto()
-    ROUND_COMPLETE = auto()
     ROUND_FAILED = auto()
-    GAME_OVER = auto()
 
 
 class SoldierState(Enum):

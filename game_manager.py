@@ -70,13 +70,11 @@ class GameManager(GameInputMixin):
         self.round_timer = 0.0
         self.game_speed = 1
         self.base_armor = config["gameplay"]["base_upgrade_armor"][0]
-        self.idle_timer = 0.0
         self.debug_mode = False
         self.music_volume = 0.3
         self.music_muted = False
         self.wave_countdown = 0.0
         self.wave_countdown_max = 60.0
-        self.gold_drip_accum = 0.0
         self.prep_phase = False
         self.moving_tower = None
         waypoints = self.game_map.get_path_pixel_waypoints()
@@ -92,12 +90,6 @@ class GameManager(GameInputMixin):
         Args:
             dt: Delta time in seconds since last frame.
         """
-        if self.state == GameState.ROUND_COMPLETE:
-            self.wave_countdown -= dt
-            if self.wave_countdown <= 0:
-                self._begin_next_round()
-            return
-
         if self.state != GameState.PLAYING:
             return
 
@@ -166,13 +158,6 @@ class GameManager(GameInputMixin):
         prev_count = len(self.enemies)
         self.enemies = [e for e in self.enemies if e.is_alive]
         new_count = len(self.enemies)
-
-        if new_count < prev_count:
-            self.idle_timer = 0.0
-        elif not self.wave_manager.wave_active and new_count > 0:
-            self.idle_timer += dt
-        else:
-            self.idle_timer = 0.0
 
         if self.wave_manager.is_round_clear(self.enemies):
             self._on_round_clear()
@@ -248,7 +233,6 @@ class GameManager(GameInputMixin):
         self.gold += bonus
         self.highest_round = max(self.highest_round, self.current_round)
         self.wave_countdown = self.wave_countdown_max
-        self.gold_drip_accum = 0.0
         self.prep_phase = True
         self.moving_tower = None
 
@@ -269,13 +253,9 @@ class GameManager(GameInputMixin):
                 music_volume=self.music_volume,
                 debug_mode=self.debug_mode
             )
-        elif self.state == GameState.ROUND_COMPLETE:
-            self._render_gameplay()
         elif self.state == GameState.ROUND_FAILED:
             self._render_gameplay()
             self.renderer.draw_round_failed(self.current_round)
-        elif self.state == GameState.GAME_OVER:
-            self.renderer.draw_game_over(self.highest_round)
 
     def _render_gameplay(self):
         """Render the active gameplay scene."""
@@ -399,9 +379,7 @@ class GameManager(GameInputMixin):
         self.round_timer = 0.0
         self.game_speed = 1
         self.base_armor = self.config["gameplay"]["base_upgrade_armor"][0]
-        self.idle_timer = 0.0
         self.wave_countdown = 0.0
-        self.gold_drip_accum = 0.0
         self.prep_phase = False
         self.moving_tower = None
         waypoints = self.game_map.get_path_pixel_waypoints()

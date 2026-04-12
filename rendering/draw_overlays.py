@@ -183,48 +183,6 @@ class RendererOverlaysMixin:
             self.screen.blit(ctrl_text,
                              ctrl_text.get_rect(center=(sw // 2, 380 + i * 24)))
 
-    def draw_round_complete(self, round_number, bonus_gold, countdown=0):
-        """Draw the round complete overlay with wave countdown."""
-        sw = self.config["screen"]["width"]
-        sh = self.config["screen"]["height"]
-        self.anim_tick += 1
-        self._draw_overlay_bg(80)
-
-        cx = sw // 2
-        label = "Continue [SPACE]"
-
-        title_surf = self.font_large.render(
-            f"Round {round_number} Complete!", True, (100, 255, 100))
-        bonus_surf = self.font_medium.render(
-            f"+{bonus_gold} Gold!", True, (255, 215, 0))
-        label_surf = self.font_medium.render(label, True, (255, 255, 255))
-
-        max_text_w = max(title_surf.get_width(),
-                         bonus_surf.get_width(),
-                         label_surf.get_width())
-        frame_w = min(max_text_w + 60, sw - 40)
-        frame_h = 220
-        fy = sh // 2 - frame_h // 2
-
-        frame = pygame.Rect(cx - frame_w // 2, fy, frame_w, frame_h)
-        self._draw_decorative_frame(frame, (80, 190, 80), (25, 50, 25))
-
-        self.screen.blit(title_surf,
-                         title_surf.get_rect(center=(cx, fy + 38)))
-        self.screen.blit(bonus_surf,
-                         bonus_surf.get_rect(center=(cx, fy + 80)))
-
-        if countdown > 0:
-            timer_surf = self.font_small.render(
-                f"Next wave in {countdown}s", True, (200, 220, 180))
-            self.screen.blit(timer_surf,
-                             timer_surf.get_rect(center=(cx, fy + 110)))
-
-        btn_w = min(label_surf.get_width() + 40, frame_w - 40)
-        btn = pygame.Rect(cx - btn_w // 2, fy + frame_h - 64, btn_w, 42)
-        self._draw_button(btn, label,
-                          (40, 140, 40), (60, 180, 60), (100, 220, 100))
-
     def draw_round_failed(self, round_number):
         """Draw the round failed overlay."""
         sw = self.config["screen"]["width"]
@@ -258,42 +216,6 @@ class RendererOverlaysMixin:
         restart_btn = pygame.Rect(cx - btn_w // 2, fy + 166, btn_w, 42)
         self._draw_button(restart_btn, "Restart",
                           (50, 50, 70), (70, 70, 90), (110, 110, 130))
-
-    def draw_game_over(self, highest_round):
-        """Draw the game over screen."""
-        sw = self.config["screen"]["width"]
-        sh = self.config["screen"]["height"]
-        self.anim_tick += 1
-
-        for y in range(sh):
-            ratio = y / sh
-            r = int(30 + ratio * 10)
-            g = int(8 + ratio * 5)
-            b = int(8 + ratio * 5)
-            pygame.draw.line(self.screen, (r, g, b), (0, y), (sw, y))
-
-        cx = sw // 2
-        title_surf = self.font_large.render(
-            "GAME OVER", True, (220, 40, 40))
-        info_surf = self.font_medium.render(
-            f"Highest round: {highest_round}", True, (200, 200, 200))
-        max_w = max(title_surf.get_width(), info_surf.get_width())
-        frame_w = min(max(max_w + 60, 280), sw - 40)
-        frame_h = 200
-        fy = sh // 2 - frame_h // 2
-
-        frame = pygame.Rect(cx - frame_w // 2, fy, frame_w, frame_h)
-        self._draw_decorative_frame(frame, (160, 40, 40), (25, 8, 8))
-
-        self.screen.blit(title_surf,
-                         title_surf.get_rect(center=(cx, fy + 40)))
-        self.screen.blit(info_surf,
-                         info_surf.get_rect(center=(cx, fy + 85)))
-
-        btn_w = 200
-        btn = pygame.Rect(cx - btn_w // 2, fy + frame_h - 60, btn_w, 42)
-        self._draw_button(btn, "Restart [R]",
-                          (60, 140, 60), (80, 180, 80), (120, 220, 120))
 
     def draw_pause_overlay(self, music_muted=False, music_volume=0.3,
                            debug_mode=False):
@@ -435,19 +357,10 @@ class RendererOverlaysMixin:
         return pygame.Rect(bx - btn_w // 2, by - ring_r - btn_h // 2,
                            btn_w, btn_h)
 
-    def get_next_round_button_rect(self):
-        """Get the 'Next Round' button rectangle."""
-        sh = self.config["screen"]["height"]
-        return self._get_centered_button_rect(sh // 2 + 30)
-
     def get_retry_button_rect(self):
         """Get the 'Retry' button rectangle."""
         sh = self.config["screen"]["height"]
         return self._get_centered_button_rect(sh // 2 + 10)
-
-    def get_restart_button_rect(self):
-        """Get the 'Restart' button rectangle."""
-        return self._get_centered_button_rect(340)
 
     def get_full_restart_button_rect(self):
         """Get the 'Full Restart' button on round failed screen."""

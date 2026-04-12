@@ -394,12 +394,6 @@ class RendererHudMixin:
                              ct.get_rect(center=(x + btn_size // 2,
                                                  y + btn_size - 5)))
 
-    def _draw_tower_info(self, tower, colors, panel_top):
-        """No-op: tower info is now shown via radial menu."""
-
-    def _draw_tower_type_tooltip(self, tower_type, panel_top):
-        """No-op: tooltip is now drawn via _draw_placement_tooltip."""
-
     # ------------------------------------------------------------------
     # Build menu
     # ------------------------------------------------------------------

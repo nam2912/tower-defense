@@ -27,7 +27,7 @@ def get_config():
             "rows": 10
         },
         "gameplay": {
-            "starting_gold": 1000,
+            "starting_gold": 400,
             "starting_lives": 1,
             "base_hp": 20,
             "base_upgrade_cost": [0, 150, 280, 450, 700],

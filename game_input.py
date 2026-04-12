@@ -5,7 +5,6 @@ Split from ``game_manager.py`` for readability — methods reference
 ``self`` attributes owned by ``GameManager``.
 """
 
-import math
 import pygame
 from enums import GameState, TowerType
 
@@ -23,9 +22,7 @@ class GameInputMixin:
             GameState.MENU: self._handle_menu_event,
             GameState.PLAYING: self._handle_playing_event,
             GameState.PAUSED: self._handle_paused_event,
-            GameState.ROUND_COMPLETE: self._handle_round_complete_event,
             GameState.ROUND_FAILED: self._handle_round_failed_event,
-            GameState.GAME_OVER: self._handle_game_over_event,
         }
         handler = handlers.get(self.state)
         if handler is not None:
@@ -134,17 +131,6 @@ class GameInputMixin:
         if rects["resume"].collidepoint(mouse_pos):
             self.state = GameState.PLAYING
 
-    def _handle_round_complete_event(self, event):
-        """During round-complete the game is in prep phase.
-
-        Delegates to the playing event handler so the player can
-        place/upgrade/move towers while waiting.
-
-        Args:
-            event: A pygame event.
-        """
-        self._handle_playing_event(event)
-
     def _handle_round_failed_event(self, event):
         """Handle events on the round failed screen.
 
@@ -167,23 +153,6 @@ class GameInputMixin:
             full_btn = self.renderer.get_full_restart_button_rect()
             if full_btn.collidepoint(event.pos):
                 self._full_restart()
-
-    def _handle_game_over_event(self, event):
-        """Handle events on the game over screen.
-
-        Args:
-            event: A pygame event.
-        """
-        activated = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-            activated = True
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            btn = self.renderer.get_restart_button_rect()
-            if btn.collidepoint(event.pos):
-                activated = True
-
-        if activated:
-            self._full_restart()
 
     def _handle_click(self, mouse_pos):
         """Handle mouse click during gameplay.

@@ -23,11 +23,8 @@ class AssetLoader:
         tile_size: Target tile dimension in pixels.
         terrain: Dict of terrain sprite surfaces.
         towers: Dict mapping TowerType to a sprite surface.
-        tower_bases: List of tower base sprites (small to xlarge).
         enemies: Dict mapping EnemyType to a sprite surface.
         soldiers: Dict with 'idle' and 'fight' soldier sprites.
-        projectiles: Dict of projectile sprite surfaces.
-        particles: Dict of particle sprite surfaces.
         ui: Dict of UI element sprite surfaces.
         font: Loaded Kenney Future font, or fallback system font.
     """
@@ -43,11 +40,8 @@ class AssetLoader:
         self._dir = assets_dir
         self.terrain = {}
         self.towers = {}
-        self.tower_bases = []
         self.enemies = {}
         self.soldiers = {}
-        self.projectiles = {}
-        self.particles = {}
         self.ui = {}
         self.font = None
         self._load_all()
@@ -98,8 +92,6 @@ class AssetLoader:
         self._load_towers()
         self._load_enemies()
         self._load_soldiers()
-        self._load_projectiles()
-        self._load_particles()
         self._load_ui()
         self._load_font()
 
@@ -152,11 +144,6 @@ class AssetLoader:
         for t_type, filename in tower_files.items():
             self.towers[t_type] = self._load("towers", filename, size=ts)
 
-        base_files = ["tower_base_small.png", "tower_base_medium.png",
-                      "tower_base_large.png", "tower_base_xlarge.png"]
-        base_ts = self._ts(0.7)
-        for bf in base_files:
-            self.tower_bases.append(self._load("towers", bf, size=base_ts))
         self.tower_base_main = self._load("towers", "tower_base.png",
                                           size=self._ts(0.95))
 
@@ -187,29 +174,9 @@ class AssetLoader:
         self.soldiers["fight"] = self._load("soldiers", "soldier_fight.png",
                                             size=s)
 
-    def _load_projectiles(self):
-        """Load projectile sprites."""
-        ps = (12, 12)
-        self.projectiles["yellow"] = self._load("projectiles",
-                                                "bullet_yellow.png", size=ps)
-        self.projectiles["orange"] = self._load("projectiles",
-                                                "bullet_orange.png", size=ps)
-
-    def _load_particles(self):
-        """Load particle effect sprites."""
-        names = ["circle", "fire", "flame", "smoke", "spark",
-                 "magic", "star", "light", "muzzle", "flare", "trace"]
-        for name in names:
-            self.particles[name] = self._load("effects",
-                                              f"particle_{name}.png",
-                                              size=(24, 24))
-        self.particles["portal"] = self._load("effects", "portal.png",
-                                              size=self._ts(1.0))
-
     def _load_ui(self):
         """Load UI sprites (buttons, icons, panels)."""
         btn_size = (120, 48)
-        btn_sq = (48, 48)
         icon_size = (32, 32)
         self.ui["btn_green"] = self._load("ui", "btn_green.png", size=btn_size)
         self.ui["btn_red"] = self._load("ui", "btn_red.png", size=btn_size)
@@ -217,25 +184,14 @@ class AssetLoader:
                                            size=btn_size)
         self.ui["btn_blue"] = self._load("ui", "btn_blue.png", size=btn_size)
         self.ui["btn_grey"] = self._load("ui", "btn_grey.png", size=btn_size)
-        self.ui["btn_round_green"] = self._load("ui", "btn_round_green.png",
-                                                size=btn_sq)
-        self.ui["btn_round_red"] = self._load("ui", "btn_round_red.png",
-                                              size=btn_sq)
-        self.ui["btn_round_yellow"] = self._load("ui",
-                                                 "btn_round_yellow.png",
-                                                 size=btn_sq)
         self.ui["btn_square_grey"] = self._load("ui", "btn_square_grey.png",
-                                                size=btn_sq)
+                                                size=(48, 48))
         self.ui["btn_square_green"] = self._load("ui", "btn_square_green.png",
-                                                 size=btn_sq)
+                                                 size=(48, 48))
         self.ui["icon_upgrade"] = self._load("ui", "icon_upgrade.png",
                                              size=icon_size)
         self.ui["icon_sell"] = self._load("ui", "icon_sell.png",
                                           size=icon_size)
-        self.ui["icon_play"] = self._load("ui", "icon_play.png",
-                                          size=icon_size)
-        self.ui["icon_repeat"] = self._load("ui", "icon_repeat.png",
-                                            size=icon_size)
         self.ui["panel_bg"] = self._load("ui", "panel_bg.png",
                                          size=(200, 100))
         self.ui["castle"] = self._load("ui", "castle.png",
@@ -282,63 +238,6 @@ class AssetLoader:
         if size is not None:
             return pygame.transform.scale(base, size)
         return base
-
-    def get_path_tile(self, col, row, game_map):
-        """Choose the correct path tile variant based on neighbours.
-
-        Analyses which adjacent cells are also path to select the right
-        sprite (straight, corner, T-junction, crossroads, or dead end).
-
-        Args:
-            col: Grid column.
-            row: Grid row.
-            game_map: GameMap with grid data.
-
-        Returns:
-            The appropriate path terrain Surface.
-        """
-        grid = game_map.grid
-        rows = game_map.rows
-        cols = game_map.cols
-
-        top = row > 0 and grid[row - 1][col] == 1
-        bot = row < rows - 1 and grid[row + 1][col] == 1
-        left = col > 0 and grid[row][col - 1] == 1
-        right = col < cols - 1 and grid[row][col + 1] == 1
-
-        count = sum([top, bot, left, right])
-
-        if count == 4:
-            return self.terrain["path_cross"]
-        if count == 3:
-            if not top:
-                return self.terrain["path_t_top"]
-            if not left:
-                return self.terrain["path_t_left"]
-            return self.terrain["path_center"]
-        if count == 2:
-            if top and bot:
-                return self.terrain["path_straight_v"]
-            if left and right:
-                return self.terrain["path_straight_h"]
-            if top and right:
-                return self.terrain["path_corner_bl"]
-            if top and left:
-                return self.terrain["path_corner_br"]
-            if bot and right:
-                return self.terrain["path_corner_tl"]
-            if bot and left:
-                return self.terrain["path_corner_tr"]
-        if count == 1:
-            if top:
-                return self.terrain["path_end_bottom"]
-            if bot:
-                return self.terrain["path_end_top"]
-            if left:
-                return self.terrain["path_end_right"]
-            if right:
-                return self.terrain["path_end_left"]
-        return self.terrain["path_center"]
 
     def get_decoration(self, col, row):
         """Return a deterministic decoration sprite for a non-buildable tile.

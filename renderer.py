@@ -12,7 +12,7 @@ import math
 import os
 import random
 import pygame
-from enums import TowerType, EnemyType
+from enums import TowerType
 from effects import Effects
 from asset_loader import AssetLoader
 from rendering.draw_entities import RendererEntitiesMixin
