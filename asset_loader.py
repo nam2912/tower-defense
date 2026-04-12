@@ -135,7 +135,7 @@ class AssetLoader:
 
     def _load_towers(self):
         """Load tower sprites keyed by TowerType."""
-        ts = self._ts(0.6)
+        ts = self._ts(0.85)
         tower_files = {
             TowerType.FORTRESS: "tower_fortress.png",
             TowerType.ARCHER: "tower_archer.png",
@@ -158,7 +158,7 @@ class AssetLoader:
         for bf in base_files:
             self.tower_bases.append(self._load("towers", bf, size=base_ts))
         self.tower_base_main = self._load("towers", "tower_base.png",
-                                          size=self._ts(0.8))
+                                          size=self._ts(0.95))
 
     def _load_enemies(self):
         """Load enemy sprites keyed by EnemyType."""
@@ -167,7 +167,7 @@ class AssetLoader:
             EnemyType.RUNNER: self._ts(0.55),
             EnemyType.ARMORED: self._ts(0.7),
             EnemyType.BOMBER: self._ts(0.65),
-            EnemyType.BOSS: self._ts(1.1),
+            EnemyType.BOSS: self._ts(1.35),
         }
         enemy_files = {
             EnemyType.GRUNT: "enemy_grunt.png",
@@ -204,7 +204,7 @@ class AssetLoader:
                                               f"particle_{name}.png",
                                               size=(24, 24))
         self.particles["portal"] = self._load("effects", "portal.png",
-                                              size=self._ts(0.8))
+                                              size=self._ts(1.0))
 
     def _load_ui(self):
         """Load UI sprites (buttons, icons, panels)."""

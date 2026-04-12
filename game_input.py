@@ -41,14 +41,19 @@ class GameInputMixin:
             self._start_new_game()
 
     def _handle_playing_event(self, event):
-        """Handle events during gameplay.
+        """Handle events during gameplay (including prep phase).
 
         Args:
             event: A pygame event.
         """
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE and self.prep_phase:
+                self._begin_next_round()
+                return
             if event.key == pygame.K_ESCAPE:
-                if (self.selected_tower_type is not None
+                if self.moving_tower is not None:
+                    self.moving_tower = None
+                elif (self.selected_tower_type is not None
                         or self.selected_tower is not None
                         or self.selected_base
                         or self.selected_build_spot is not None):
@@ -130,21 +135,15 @@ class GameInputMixin:
             self.state = GameState.PLAYING
 
     def _handle_round_complete_event(self, event):
-        """Handle events on the round complete screen.
+        """During round-complete the game is in prep phase.
+
+        Delegates to the playing event handler so the player can
+        place/upgrade/move towers while waiting.
 
         Args:
             event: A pygame event.
         """
-        activated = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            activated = True
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            btn = self.renderer.get_next_round_button_rect()
-            if btn.collidepoint(event.pos):
-                activated = True
-
-        if activated:
-            self._begin_next_round()
+        self._handle_playing_event(event)
 
     def _handle_round_failed_event(self, event):
         """Handle events on the round failed screen.
@@ -192,6 +191,20 @@ class GameInputMixin:
         Args:
             mouse_pos: Tuple (x, y) pixel position of click.
         """
+        if self.prep_phase:
+            nw_rect = self.renderer.get_next_wave_button_rect()
+            if nw_rect.collidepoint(mouse_pos):
+                self._begin_next_round()
+                return
+
+        if self.prep_phase and self.moving_tower is not None:
+            col, row = self.game_map.get_grid_pos(
+                mouse_pos[0], mouse_pos[1])
+            if self.game_map.is_build_spot(col, row):
+                self._move_tower_to(col, row)
+                return
+            self.moving_tower = None
+
         speed_rect = self.renderer.get_speed_button_rect()
         if speed_rect.collidepoint(mouse_pos):
             self._toggle_speed()
@@ -342,6 +355,9 @@ class GameInputMixin:
     def _try_select_placed_tower(self, col, row):
         """Try to select an existing tower at the given grid position.
 
+        During prep phase, the first click selects for movement; a second
+        click on an empty build spot completes the move.
+
         Args:
             col: Grid column.
             row: Grid row.
@@ -350,6 +366,8 @@ class GameInputMixin:
         for tower in self.towers:
             if tower.x == col and tower.y == row:
                 self.selected_tower = tower
+                if self.prep_phase:
+                    self.moving_tower = tower
                 break
 
     def _check_build_menu_click(self, mouse_pos):
@@ -413,6 +431,28 @@ class GameInputMixin:
         self.base_armor = self.config["gameplay"]["base_upgrade_armor"][
             self.base_level - 1
         ]
+
+    def _move_tower_to(self, col, row):
+        """Move the selected tower to a new build spot (prep phase only).
+
+        Args:
+            col: Target grid column.
+            row: Target grid row.
+        """
+        tower = self.moving_tower
+        if tower is None:
+            return
+        old_col, old_row = tower.x, tower.y
+        self.game_map.add_build_spot(old_col, old_row)
+        tower.x = col
+        tower.y = row
+        ts = self.game_map.tile_size
+        tower.pixel_x = col * ts + ts // 2
+        tower.pixel_y = row * ts + ts // 2
+        self.game_map.remove_build_spot(col, row)
+        self.moving_tower = None
+        self.selected_tower = tower
+        self.renderer.invalidate_grass_cache()
 
     def _toggle_speed(self):
         """Cycle game speed: 1x -> 2x -> 3x -> 1x."""

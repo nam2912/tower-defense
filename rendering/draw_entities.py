@@ -64,9 +64,11 @@ class RendererEntitiesMixin:
                     TowerType.NECROMANCER: (100, 255, 100),
                 }
                 fc = flash_colors.get(tower.tower_type, (255, 255, 200))
-                pygame.draw.circle(self.screen, fc, (cx, cy - 6), 8, 2)
+                glow_c = tuple(min(255, c + 60) for c in fc)
+                pygame.draw.circle(self.screen, fc, (cx, cy - 6), 10, 3)
+                pygame.draw.circle(self.screen, glow_c, (cx, cy - 6), 5)
                 pygame.draw.circle(self.screen, (255, 255, 255),
-                                   (cx, cy - 6), 4)
+                                   (cx, cy - 6), 2)
 
     def _draw_tower_level_stars(self, cx, y, level):
         """Draw tiered star indicators: gold (1-5), orange (6-10), red (11-15)."""
@@ -140,28 +142,36 @@ class RendererEntitiesMixin:
             pygame.draw.line(self.screen, color, tail, (px, py), 4)
             pygame.draw.line(self.screen, glow, mid, (px, py), 2)
 
-            if tt in _PHYSICAL:
-                sprite = self.assets.projectiles.get("orange")
+            if tt == TowerType.ARTILLERY:
+                pygame.draw.circle(self.screen, color, (px, py), 8)
+                pygame.draw.circle(self.screen, glow, (px, py), 5)
+                pygame.draw.circle(self.screen, (255, 255, 255),
+                                   (px, py), 2)
+            elif tt in _PHYSICAL:
+                tip = (int(px + nx * 6), int(py + ny * 6))
+                left = (int(px - nx * 4 - ny * 3),
+                        int(py - ny * 4 + nx * 3))
+                right = (int(px - nx * 4 + ny * 3),
+                         int(py - ny * 4 - nx * 3))
+                pygame.draw.polygon(self.screen, color,
+                                    [tip, left, right])
+                pygame.draw.circle(self.screen, glow, (px, py), 3)
             elif tt in _MAGIC:
-                sprite = self.assets.particles.get("magic")
+                pygame.draw.circle(self.screen, glow, (px, py), 7)
+                pygame.draw.circle(self.screen, color, (px, py), 5)
+                for si in range(4):
+                    sa = self.anim_tick * 0.3 + si * math.pi / 2
+                    spx = int(px + math.cos(sa) * 8)
+                    spy = int(py + math.sin(sa) * 8)
+                    pygame.draw.circle(self.screen, glow,
+                                       (spx, spy), 2)
             elif tt == TowerType.FREEZE:
-                sprite = self.assets.particles.get("star")
+                pygame.draw.circle(self.screen, glow, (px, py), 6)
+                pygame.draw.circle(self.screen, (255, 255, 255),
+                                   (px, py), 3)
             else:
-                sprite = self.assets.projectiles.get("yellow")
-
-            if sprite is not None:
-                head_size = 18 if tt == TowerType.ARTILLERY else 14
-                scaled = pygame.transform.scale(sprite,
-                                                (head_size, head_size))
-                angle = -math.degrees(math.atan2(dy, dx))
-                rotated = pygame.transform.rotate(scaled, angle)
-                rotated.set_colorkey((255, 0, 255))
-                rw, rh = rotated.get_size()
-                self.screen.blit(rotated,
-                                 (px - rw // 2, py - rh // 2))
-            else:
-                pygame.draw.circle(self.screen, color, (px, py), 7)
-                pygame.draw.circle(self.screen, glow, (px, py), 4)
+                pygame.draw.circle(self.screen, color, (px, py), 6)
+                pygame.draw.circle(self.screen, glow, (px, py), 3)
 
     def _draw_attack_beams(self, towers):
         """Draw beam/lightning for Tesla/Laser and targeting lines for all.
@@ -236,6 +246,7 @@ class RendererEntitiesMixin:
 
     def _draw_enemies(self, enemies):
         """Draw all living enemies using sprites with direction flipping."""
+        from enums import EnemyType
         for enemy in enemies:
             if not enemy.is_alive:
                 continue
@@ -244,7 +255,9 @@ class RendererEntitiesMixin:
             if sprite is None:
                 continue
 
+            is_boss = enemy.enemy_type == EnemyType.BOSS
             bob = int(math.sin(self.anim_tick * 0.15) * 2)
+            w, h = sprite.get_size()
 
             img = sprite
             if hasattr(enemy, 'direction_x') and enemy.direction_x > 0:
@@ -253,27 +266,59 @@ class RendererEntitiesMixin:
 
             if enemy.hit_timer > 0:
                 hit_surf = img.copy()
-                hit_surf.fill((255, 120, 120), special_flags=pygame.BLEND_RGB_ADD)
+                hit_surf.fill((200, 80, 80),
+                              special_flags=pygame.BLEND_RGB_ADD)
                 hit_surf.set_colorkey((255, 0, 255))
                 img = hit_surf
 
-            w, h = img.get_size()
             self.screen.blit(img, (cx - w // 2, cy - h // 2 + bob))
 
+            if is_boss:
+                self._draw_boss_indicator(cx, cy, w, h, enemy)
+            else:
+                self._draw_health_bar(cx - 14, cy - 22, 28, 4,
+                                      enemy.get_hp_ratio())
+
             if hasattr(enemy, 'slow_timer') and enemy.slow_timer > 0:
+                r = 16 if is_boss else 11
                 pygame.draw.circle(self.screen, (100, 180, 255),
-                                   (cx, cy), 11, 1)
+                                   (cx, cy), r, 1)
 
             if hasattr(enemy, 'poison_timer') and enemy.poison_timer > 0:
+                dist = 18 if is_boss else 12
                 for pi in range(3):
                     pa = self.anim_tick * 0.15 + pi * 2.1
-                    ppx = int(cx + math.cos(pa) * 12)
-                    ppy = int(cy + math.sin(pa) * 12)
+                    ppx = int(cx + math.cos(pa) * dist)
+                    ppy = int(cy + math.sin(pa) * dist)
                     pygame.draw.circle(self.screen, (100, 220, 50),
                                        (ppx, ppy), 2)
 
-            self._draw_health_bar(cx - 14, cy - 22, 28, 4,
-                                  enemy.get_hp_ratio())
+    def _draw_boss_indicator(self, cx, cy, w, h, enemy):
+        """Draw boss-specific UI: larger HP bar, name tag, crown icon.
+
+        Args:
+            cx: Center X pixel of boss.
+            cy: Center Y pixel of boss.
+            w: Sprite width.
+            h: Sprite height.
+            enemy: Enemy instance.
+        """
+        bar_w = max(40, w + 10)
+        bar_h = 6
+        bar_x = cx - bar_w // 2
+        bar_y = cy - h // 2 - 16
+        self._draw_health_bar(bar_x, bar_y, bar_w, bar_h,
+                              enemy.get_hp_ratio())
+
+        crown_y = bar_y - 10
+        pts = [
+            (cx - 8, crown_y + 6), (cx - 8, crown_y),
+            (cx - 4, crown_y + 3), (cx, crown_y - 2),
+            (cx + 4, crown_y + 3), (cx + 8, crown_y),
+            (cx + 8, crown_y + 6),
+        ]
+        pygame.draw.polygon(self.screen, (255, 200, 40), pts)
+        pygame.draw.polygon(self.screen, (200, 150, 20), pts, 1)
 
     # ------------------------------------------------------------------
     # Soldiers (sprite blit)

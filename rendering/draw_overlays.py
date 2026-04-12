@@ -88,17 +88,9 @@ class RendererOverlaysMixin:
             if tint is not None:
                 scaled.fill(tint, special_flags=pygame.BLEND_RGB_MULT)
             scaled.set_colorkey((255, 0, 255))
-            if hovering:
-                bright = scaled.copy()
-                bright.fill((30, 30, 30),
-                            special_flags=pygame.BLEND_RGB_ADD)
-                bright.set_colorkey((255, 0, 255))
-                self.screen.blit(bright, rect.topleft)
-            else:
-                self.screen.blit(scaled, rect.topleft)
+            self.screen.blit(scaled, rect.topleft)
         else:
-            bg = (70, 70, 90) if hovering else (45, 45, 60)
-            pygame.draw.rect(self.screen, bg, rect, border_radius=6)
+            pygame.draw.rect(self.screen, (45, 45, 60), rect, border_radius=6)
             pygame.draw.rect(self.screen, (140, 140, 160), rect, 2,
                              border_radius=6)
 
@@ -341,7 +333,7 @@ class RendererOverlaysMixin:
         for key in ("vol_down", "vol_up"):
             r = rects[key]
             hov = r.collidepoint(mouse)
-            self._blit_ui_btn("btn_grey", r, hov)
+            self._blit_ui_btn("btn_blue", r, hov)
             sym = "-" if key == "vol_down" else "+"
             st = self.font_medium.render(sym, True, (255, 255, 255))
             self.screen.blit(st, st.get_rect(center=r.center))
@@ -366,7 +358,7 @@ class RendererOverlaysMixin:
 
         dbg_r = rects["debug"]
         dbg_hover = dbg_r.collidepoint(mouse)
-        dbg_key = "btn_green" if debug_mode else "btn_grey"
+        dbg_key = "btn_green" if debug_mode else "btn_yellow"
         self._blit_ui_btn(dbg_key, dbg_r, dbg_hover)
         check_label = "Debug: ON" if debug_mode else "Debug: OFF"
         dt_txt = self.font_small.render(check_label, True, (255, 255, 255))

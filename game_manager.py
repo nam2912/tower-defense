@@ -77,6 +77,8 @@ class GameManager(GameInputMixin):
         self.wave_countdown = 0.0
         self.wave_countdown_max = 60.0
         self.gold_drip_accum = 0.0
+        self.prep_phase = False
+        self.moving_tower = None
         waypoints = self.game_map.get_path_pixel_waypoints()
         self.base_wp = waypoints[-1] if waypoints else None
 
@@ -97,6 +99,12 @@ class GameManager(GameInputMixin):
             return
 
         if self.state != GameState.PLAYING:
+            return
+
+        if self.prep_phase:
+            self.wave_countdown -= dt
+            if self.wave_countdown <= 0:
+                self._begin_next_round()
             return
 
         dt *= self.game_speed
@@ -235,13 +243,14 @@ class GameManager(GameInputMixin):
         self.towers = [t for t in self.towers if not t.is_destroyed]
 
     def _on_round_clear(self):
-        """Handle a completed round — start countdown to next wave."""
+        """Handle a completed round — enter prep phase with countdown."""
         bonus = self.config["gameplay"]["round_bonus_gold"]
         self.gold += bonus
         self.highest_round = max(self.highest_round, self.current_round)
         self.wave_countdown = self.wave_countdown_max
         self.gold_drip_accum = 0.0
-        self.state = GameState.ROUND_COMPLETE
+        self.prep_phase = True
+        self.moving_tower = None
 
     # ------------------------------------------------------------------
     # Rendering delegation
@@ -262,11 +271,6 @@ class GameManager(GameInputMixin):
             )
         elif self.state == GameState.ROUND_COMPLETE:
             self._render_gameplay()
-            self.renderer.draw_round_complete(
-                self.current_round,
-                self.config["gameplay"]["round_bonus_gold"],
-                int(self.wave_countdown)
-            )
         elif self.state == GameState.ROUND_FAILED:
             self._render_gameplay()
             self.renderer.draw_round_failed(self.current_round)
@@ -305,7 +309,11 @@ class GameManager(GameInputMixin):
             base_armor=self.base_armor,
             base_wp=self.base_wp,
             selected_build_spot=self.selected_build_spot,
-            debug_mode=self.debug_mode
+            debug_mode=self.debug_mode,
+            prep_phase=self.prep_phase,
+            prep_countdown=self.wave_countdown,
+            prep_countdown_max=self.wave_countdown_max,
+            moving_tower=self.moving_tower,
         )
 
     # ------------------------------------------------------------------
@@ -394,6 +402,8 @@ class GameManager(GameInputMixin):
         self.idle_timer = 0.0
         self.wave_countdown = 0.0
         self.gold_drip_accum = 0.0
+        self.prep_phase = False
+        self.moving_tower = None
         waypoints = self.game_map.get_path_pixel_waypoints()
         self.base_wp = waypoints[-1] if waypoints else None
         self._begin_next_round()
@@ -403,7 +413,14 @@ class GameManager(GameInputMixin):
         early_bonus = max(0, int(self.wave_countdown))
         if early_bonus > 0:
             self.gold += early_bonus
+            self.renderer.add_damage_number(
+                self.config["screen"]["width"] // 2,
+                self.config["screen"]["height"] // 2 - 40,
+                f"+{early_bonus}g early!", (100, 255, 100)
+            )
         self.wave_countdown = 0.0
+        self.prep_phase = False
+        self.moving_tower = None
         self.current_round += 1
         self.enemies = []
         self.projectiles = []

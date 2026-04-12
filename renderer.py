@@ -143,27 +143,15 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
         self.damage_numbers = alive_dmg
 
     def _draw_vfx(self):
-        """Draw particles using sprite assets and floating damage numbers."""
-        _PARTICLE_MAP = {
-            (200, 60, 60): "fire",
-            (255, 140, 40): "flame",
-            (180, 80, 30): "smoke",
-            (255, 215, 0): "star",
-        }
+        """Draw particles and floating damage numbers using procedural shapes."""
         for p in self.particles:
-            size = max(4, int(p["size"] * 3 * max(0.2, p["timer"])))
-            key = _PARTICLE_MAP.get(p["color"], "spark")
-            sprite = self.assets.particles.get(key)
-            if sprite is not None:
-                scaled = pygame.transform.scale(sprite, (size, size))
-                scaled.set_colorkey((255, 0, 255))
-                self.screen.blit(scaled,
-                                 (int(p["x"]) - size // 2,
-                                  int(p["y"]) - size // 2))
-            else:
-                pygame.draw.circle(self.screen, p["color"],
-                                   (int(p["x"]), int(p["y"])),
-                                   max(1, size // 2))
+            radius = max(1, int(p["size"] * 1.5 * max(0.2, p["timer"])))
+            px, py = int(p["x"]), int(p["y"])
+            pygame.draw.circle(self.screen, p["color"], (px, py), radius)
+            if radius > 2:
+                bright = tuple(min(255, c + 80) for c in p["color"])
+                pygame.draw.circle(self.screen, bright,
+                                   (px, py), max(1, radius // 2))
 
         for d in self.damage_numbers:
             text = self.font_dmg.render(str(d["amount"]), True, d["color"])
@@ -180,7 +168,9 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
                   tower_unlocks=None, round_timer=0.0, game_speed=1,
                   base_level=1, selected_base=False, show_skip=False,
                   base_armor=0, base_wp=None, selected_build_spot=None,
-                  debug_mode=False):
+                  debug_mode=False, prep_phase=False,
+                  prep_countdown=0.0, prep_countdown_max=60.0,
+                  moving_tower=None):
         """Draw the complete game frame."""
         self.anim_tick += 1
         self._base_wp = base_wp
@@ -189,7 +179,6 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
         self._update_vfx(dt)
 
         self._draw_map(game_map)
-        self._draw_spawn_portal(game_map)
         self._draw_base_castle(game_map, base_hp, base_max_hp, base_level,
                                selected_base)
         self._draw_build_spots(game_map, hover_pos, selected_tower_type, gold)
@@ -222,6 +211,10 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
 
         if selected_build_spot is not None:
             self._draw_build_menu(selected_build_spot, gold, tower_unlocks)
+
+        if prep_phase:
+            self._draw_prep_phase_hud(prep_countdown, prep_countdown_max,
+                                      moving_tower)
 
         if debug_mode:
             self._draw_debug_overlay(gold, base_hp, base_max_hp,
@@ -331,37 +324,6 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
         self.screen.blit(self.grass_cache, (0, 0))
 
     # ------------------------------------------------------------------
-    # Spawn portal (animated)
-    # ------------------------------------------------------------------
-
-    def _draw_spawn_portal(self, game_map):
-        """Draw a portal sprite at the enemy spawn point with pulse animation."""
-        waypoints = game_map.get_path_pixel_waypoints()
-        if not waypoints:
-            return
-        sx, sy = waypoints[0]
-        t = self.anim_tick * 0.06
-
-        portal = self.assets.particles.get("portal")
-        if portal is None:
-            return
-
-        pulse = 1.0 + math.sin(t * 2) * 0.08
-        pw = int(portal.get_width() * pulse)
-        ph = int(portal.get_height() * pulse)
-        scaled = pygame.transform.scale(portal, (pw, ph))
-        scaled.set_colorkey((255, 0, 255))
-
-        angle = (self.anim_tick * 2) % 360
-        rotated = pygame.transform.rotate(scaled, angle)
-        rotated.set_colorkey((255, 0, 255))
-        rw, rh = rotated.get_size()
-        self.screen.blit(rotated, (sx - rw // 2, sy - rh // 2))
-
-        glow_r = int(self.tile_size * 0.18 * pulse)
-        pygame.draw.circle(self.screen, (160, 60, 220), (sx, sy), glow_r, 2)
-
-    # ------------------------------------------------------------------
     # Base castle (sprite-based)
     # ------------------------------------------------------------------
 
@@ -459,3 +421,41 @@ class Renderer(RendererEntitiesMixin, RendererHudMixin, RendererOverlaysMixin):
         pygame.draw.ellipse(self.screen, (30, 30, 20),
                             (cx - radius, cy - radius // 4,
                              radius * 2, radius // 2), 0)
+
+    # ------------------------------------------------------------------
+    # Prep phase HUD
+    # ------------------------------------------------------------------
+
+    def get_next_wave_button_rect(self):
+        """Get the 'Next Wave' button rect below the Round badge."""
+        return pygame.Rect(6, 120, 160, 34)
+
+    def _draw_prep_phase_hud(self, countdown, countdown_max,
+                             moving_tower=None):
+        """Draw the Next Wave button below the Round badge.
+
+        Args:
+            countdown: Seconds remaining until auto-start.
+            countdown_max: Maximum countdown duration.
+            moving_tower: Tower currently being moved, or None.
+        """
+        btn_rect = self.get_next_wave_button_rect()
+        secs = max(0, int(countdown))
+        label = f"NextWave {secs}s"
+
+        mouse = pygame.mouse.get_pos()
+        hovering = btn_rect.collidepoint(mouse)
+        self._blit_ui_btn("btn_green", btn_rect, hovering)
+        shadow = self.font_tiny.render(label, True, (0, 0, 0))
+        self.screen.blit(shadow,
+                         (btn_rect.centerx - shadow.get_width() // 2 + 1,
+                          btn_rect.centery - shadow.get_height() // 2 + 1))
+        txt = self.font_tiny.render(label, True, (255, 255, 255))
+        self.screen.blit(txt, txt.get_rect(center=btn_rect.center))
+
+        if moving_tower is not None:
+            mcx, mcy = moving_tower.pixel_x, moving_tower.pixel_y
+            pulse = abs(math.sin(self.anim_tick * 0.1))
+            ring_c = (100, 200 + int(pulse * 55), 100)
+            pygame.draw.circle(self.screen, ring_c, (mcx, mcy),
+                               self.tile_size // 2 + 6, 3)
